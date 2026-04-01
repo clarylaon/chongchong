@@ -395,7 +395,7 @@ export default function FutsalCloudApp() {
         <div className="flex items-center gap-3">
           {isAdmin ? (
             <button onClick={handleLogout} className="flex items-center gap-1 bg-red-500 px-3 py-1.5 rounded text-sm font-bold hover:bg-red-600 transition-colors">
-              <LogOut size={16}/> 운영진 끄기
+              <LogOut size={16}/> 운영진 로그아웃
             </button>
           ) : (
             <button onClick={() => setShowLoginModal(true)} className="flex items-center gap-1 bg-blue-800 px-3 py-1.5 rounded text-sm font-bold hover:bg-blue-900 transition-colors border border-blue-500">
@@ -655,7 +655,7 @@ export default function FutsalCloudApp() {
       {showLoginModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <form onSubmit={handleLogin} className="bg-white rounded-lg w-full max-w-sm p-6 shadow-2xl flex flex-col gap-4">
-            <h2 className="text-xl font-bold text-center border-b pb-2">운영진 로그인</h2>
+            <h2 className="text-xl font-bold text-center border-b pb-2">로그인</h2>
             <p className="text-xs text-gray-500 text-center">Supabase에서 생성한 계정으로 로그인하세요.</p>
             <div>
               <label className="block text-sm font-bold mb-1">이메일</label>
