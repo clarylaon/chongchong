@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { 
   Users, Calendar, Activity, Trophy, Plus, 
   Trash2, UserCheck, RefreshCw, Edit2, Save, X, ArrowRightLeft,
-  ChevronUp, ChevronDown 
+  ChevronUp, ChevronDown, Instagram, Youtube, MessageCircle 
 } from 'lucide-react';
 import { 
   Radar, RadarChart, PolarGrid, PolarAngleAxis, 
@@ -15,8 +15,8 @@ import {
 // --------------------------------------------------------
 // [중요] Supabase 키 (기존 것 그대로 유지!)
 // --------------------------------------------------------
-const supabaseUrl = 'https://vgbrgrlosalarnszmanm.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZnYnJncmxvc2FsYXJuc3ptYW5tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczMzE3NzQsImV4cCI6MjA4MjkwNzc3NH0.py9Bw6NMHFOGAI8daiKrU7IQfTrQh3rsQ6L-qkYIBg0';
+const supabaseUrl = '여기에_Project_URL_입력';
+const supabaseKey = '여기에_anon_public_key_입력';
 // --------------------------------------------------------
 
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -153,11 +153,16 @@ export default function FutsalCloudApp() {
   const [movePlayerTarget, setMovePlayerTarget] = useState(null);
   const [tempAttendance, setTempAttendance] = useState([]);
 
-  // [신규] 필터 및 정렬 상태
-  const [filterGender, setFilterGender] = useState('all'); // all, 남성, 여성
+  const [filterGender, setFilterGender] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: 'level', direction: 'desc' });
 
-  // --- 데이터 불러오기 ---
+  // --- 소셜 미디어 링크 설정 (여기에 본인들 링크를 넣으세요!) ---
+  const socialLinks = {
+    instagram: "https://www.instagram.com/yonsei_gsa.fc",
+    youtube: "",
+    kakao: ""
+  };
+
   const fetchData = async () => {
     setLoading(true);
     const { data: pData } = await supabase.from('players').select('*');
@@ -179,7 +184,6 @@ export default function FutsalCloudApp() {
     setTempAttendance(currentDayIds);
   }, [records, selectedDate]);
 
-  // --- 핸들러들 ---
   const handleAddPlayer = async () => {
     if (!newPlayer.name) return;
     const level = calculateLevel(newPlayer);
@@ -288,14 +292,11 @@ export default function FutsalCloudApp() {
     }
   };
 
-  // [신규] 필터 및 정렬 로직 처리
   const processedPlayers = useMemo(() => {
     let data = [...players];
-    // 1. 필터
     if (filterGender !== 'all') {
       data = data.filter(p => p.gender === filterGender);
     }
-    // 2. 정렬
     data.sort((a, b) => {
       if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
       if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
@@ -305,7 +306,7 @@ export default function FutsalCloudApp() {
   }, [players, filterGender, sortConfig]);
 
   const handleSort = (key) => {
-    let direction = 'desc'; // 기본 내림차순
+    let direction = 'desc';
     if (sortConfig.key === key && sortConfig.direction === 'desc') {
       direction = 'asc';
     }
@@ -348,9 +349,34 @@ export default function FutsalCloudApp() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-100 font-sans pb-20 text-gray-800">
+    <div className="min-h-screen bg-gray-100 font-sans pb-20 text-gray-800 relative">
+      
+      {/* --- 우측 플로팅 소셜 배너 (PC에서만 보임) --- */}
+      <div className="hidden lg:flex flex-col gap-4 fixed right-8 top-1/2 -translate-y-1/2 z-50">
+        <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" 
+           className="bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 p-3 rounded-full text-white shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="인스타그램">
+          <Instagram size={24} />
+        </a>
+        <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" 
+           className="bg-red-600 p-3 rounded-full text-white shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="유튜브">
+          <Youtube size={24} />
+        </a>
+        <a href={socialLinks.kakao} target="_blank" rel="noopener noreferrer" 
+           className="bg-yellow-300 p-3 rounded-full text-yellow-900 shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="오픈채팅">
+          <MessageCircle size={24} />
+        </a>
+      </div>
+
       <header className="bg-blue-700 text-white p-4 sticky top-0 z-50 shadow-md flex justify-between items-center">
-        <h1 className="text-xl font-bold flex items-center gap-2"><Activity size={20}/> 풋살 매니저</h1>
+        {/* 헤더 제목과 미니 소셜 아이콘 */}
+        <div className="flex items-center gap-6">
+          <h1 className="text-xl font-bold flex items-center gap-2"><Activity size={20}/> 풋살 매니저</h1>
+          <div className="hidden sm:flex items-center gap-3 border-l border-blue-500 pl-4">
+            <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="hover:text-pink-300 transition-colors"><Instagram size={18} /></a>
+            <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="hover:text-red-300 transition-colors"><Youtube size={18} /></a>
+            <a href={socialLinks.kakao} target="_blank" rel="noopener noreferrer" className="hover:text-yellow-300 transition-colors"><MessageCircle size={18} /></a>
+          </div>
+        </div>
         <button onClick={fetchData} className="bg-blue-600 p-2 rounded-full hover:bg-blue-500"><RefreshCw size={18} className={loading ? "animate-spin" : ""}/></button>
       </header>
 
@@ -393,7 +419,6 @@ export default function FutsalCloudApp() {
 
             <div className="bg-white rounded shadow overflow-hidden">
               <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
-                 {/* [신규] 필터 버튼 */}
                  <div className="flex gap-1">
                    {['all', '남성', '여성'].map(f => (
                      <button 
@@ -410,7 +435,6 @@ export default function FutsalCloudApp() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-center whitespace-nowrap">
                   <thead className="bg-gray-100 text-gray-700 font-bold border-b">
-                    {/* [신규] 정렬 가능한 헤더 */}
                     <tr>
                       <th className="p-3 cursor-pointer hover:bg-gray-200" onClick={()=>handleSort('name')}>이름 <SortIcon colKey="name"/></th>
                       <th className="p-3 cursor-pointer hover:bg-gray-200" onClick={()=>handleSort('gender')}>성별 <SortIcon colKey="gender"/></th>
