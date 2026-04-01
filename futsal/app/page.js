@@ -353,18 +353,26 @@ export default function FutsalCloudApp() {
       
       {/* --- 우측 플로팅 소셜 배너 (PC에서만 보임) --- */}
       <div className="hidden lg:flex flex-col gap-4 fixed right-8 top-1/2 -translate-y-1/2 z-50">
-        <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" 
-           className="bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 p-3 rounded-full text-white shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="인스타그램">
-          <Instagram size={24} />
-        </a>
-        <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" 
-           className="bg-red-600 p-3 rounded-full text-white shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="유튜브">
-          <Youtube size={24} />
-        </a>
-        <a href={socialLinks.kakao} target="_blank" rel="noopener noreferrer" 
-           className="bg-yellow-300 p-3 rounded-full text-yellow-900 shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="오픈채팅">
-          <MessageCircle size={24} />
-        </a>
+        {socialLinks.instagram && (
+          <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" 
+             className="bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 p-3 rounded-full text-white shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="인스타그램">
+            <Instagram size={24} />
+          </a>
+        )}
+        
+        {socialLinks.youtube && (
+          <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" 
+             className="bg-red-600 p-3 rounded-full text-white shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="유튜브">
+            <Youtube size={24} />
+          </a>
+        )}
+        
+        {socialLinks.kakao && (
+          <a href={socialLinks.kakao} target="_blank" rel="noopener noreferrer" 
+             className="bg-yellow-300 p-3 rounded-full text-yellow-900 shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="오픈채팅">
+            <MessageCircle size={24} />
+          </a>
+        )}
       </div>
 
       <header className="bg-blue-700 text-white p-4 sticky top-0 z-50 shadow-md flex justify-between items-center">
@@ -372,9 +380,9 @@ export default function FutsalCloudApp() {
         <div className="flex items-center gap-6">
           <h1 className="text-xl font-bold flex items-center gap-2"><Activity size={20}/> 풋살 매니저</h1>
           <div className="hidden sm:flex items-center gap-3 border-l border-blue-500 pl-4">
-            <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="hover:text-pink-300 transition-colors"><Instagram size={18} /></a>
-            <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="hover:text-red-300 transition-colors"><Youtube size={18} /></a>
-            <a href={socialLinks.kakao} target="_blank" rel="noopener noreferrer" className="hover:text-yellow-300 transition-colors"><MessageCircle size={18} /></a>
+            {socialLinks.instagram && <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="hover:text-pink-300 transition-colors"><Instagram size={18} /></a>}
+            {socialLinks.youtube && <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="hover:text-red-300 transition-colors"><Youtube size={18} /></a>}
+            {socialLinks.kakao && <a href={socialLinks.kakao} target="_blank" rel="noopener noreferrer" className="hover:text-yellow-300 transition-colors"><MessageCircle size={18} /></a>}
           </div>
         </div>
         <button onClick={fetchData} className="bg-blue-600 p-2 rounded-full hover:bg-blue-500"><RefreshCw size={18} className={loading ? "animate-spin" : ""}/></button>
