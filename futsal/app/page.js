@@ -6,7 +6,7 @@ import {
   Users, Calendar, Activity, Trophy, Plus, 
   Trash2, UserCheck, RefreshCw, Edit2, Save, X, ArrowRightLeft,
   ChevronUp, ChevronDown, Instagram, Youtube, MessageCircle,
-  LogIn, LogOut, Star, Clock, Bell
+  LogIn, LogOut, Star, Clock, Bell, Download, UserPlus
 } from 'lucide-react';
 import { 
   Radar, RadarChart, PolarGrid, PolarAngleAxis, 
@@ -17,7 +17,7 @@ import {
 // [중요] Supabase 키
 // --------------------------------------------------------
 const supabaseUrl = 'https://vgbrgrlosalarnszmanm.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZnYnJncmxvc2FsYXJuc3ptYW5tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczMzE3NzQsImV4cCI6MjA4MjkwNzc3NH0.py9Bw6NMHFOGAI8daiKrU7IQfTrQh3rsQ6L-qkYIBg0';
+const supabaseKey = '여eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZnYnJncmxvc2FsYXJuc3ptYW5tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczMzE3NzQsImV4cCI6MjA4MjkwNzc3NH0.py9Bw6NMHFOGAI8daiKrU7IQfTrQh3rsQ6L-qkYIBg0';
 // --------------------------------------------------------
 
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -29,13 +29,63 @@ const calculateLevel = (stats) => {
   return Number((sum / 6).toFixed(2));
 };
 
-// 이름 옆에 파란 별을 달아주는 전용 컴포넌트
-const PlayerName = ({ player }) => (
-  <span className="flex items-center gap-1 font-bold">
-    {player.group === '스타즈' && <Star size={14} className="fill-blue-500 text-blue-500" />}
-    {player.name}
-  </span>
-);
+const calculateExpireDate = (type, dateStr) => {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (type === '반납형') {
+    d.setMonth(d.getMonth() + 4);
+    const offsetDate = new Date(d.getTime() - (d.getTimezoneOffset() * 60000));
+    return offsetDate.toISOString().split('T')[0];
+  } 
+  else if (type === '연납형') {
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1; 
+    if (y === 2026) return '2027-02-28';
+    let expY = m <= 2 ? y : y + 1;
+    const lastDay = new Date(expY, 2, 0);
+    const offsetDate = new Date(lastDay.getTime() - (lastDay.getTimezoneOffset() * 60000));
+    return offsetDate.toISOString().split('T')[0];
+  }
+  return null;
+};
+
+const getDday = (expireDateStr) => {
+  if (!expireDateStr) return null;
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const exp = new Date(expireDateStr);
+  exp.setHours(0,0,0,0);
+  const diffTime = exp - today;
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+};
+
+const DdayBadge = ({ dday }) => {
+  if (dday === null) return null;
+  if (dday < 0) return <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded border border-red-300 font-bold ml-1">만료됨</span>;
+  if (dday <= 14) return <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded border border-yellow-400 font-bold ml-1">D-{dday}</span>;
+  return null;
+};
+
+// [핵심 변경] 이름 옆 파란 별 & 게스트 뱃지 + 초대자 꼬리표
+const PlayerName = ({ player }) => {
+  const isStar = player.group === '스타즈';
+  const isGuest = player.group === '게스트';
+  const dday = isStar ? getDday(player.expire_date) : null;
+  return (
+    <span className="flex items-center gap-1 font-bold">
+      {isStar && <Star size={14} className="fill-blue-500 text-blue-500 shrink-0" />}
+      {isGuest && <span className="text-[10px] bg-green-500 text-white px-1.5 py-0.5 rounded-full shrink-0">G</span>}
+      <span className={`whitespace-nowrap ${dday !== null && dday < 0 ? 'text-gray-400 line-through' : ''}`}>
+        {player.name}
+        {isGuest && player.stars_type && (
+          <span className="text-[10px] text-green-700 font-normal ml-1 bg-green-50 px-1 rounded border border-green-200 shrink-0">
+            초대: {player.stars_type}
+          </span>
+        )}
+      </span>
+    </span>
+  );
+};
 
 const Card = ({ title, children, className = "" }) => (
   <div className={`bg-white rounded-lg border-2 border-blue-600 overflow-hidden shadow-sm flex flex-col ${className}`}>
@@ -75,6 +125,8 @@ const PlayerDetailModal = ({ player, records, onClose }) => {
   const history = records.filter(r => r.player_id === player.id).sort((a, b) => new Date(b.date) - new Date(a.date));
   const totalGoals = history.reduce((acc, cur) => acc + cur.goals, 0);
   const totalAssists = history.reduce((acc, cur) => acc + cur.assists, 0);
+  const dday = player.group === '스타즈' ? getDday(player.expire_date) : null;
+  
   const chartData = [
     { subject: '밸런스', A: player.balance, fullMark: 10 },
     { subject: '패스', A: player.passing, fullMark: 10 },
@@ -109,8 +161,21 @@ const PlayerDetailModal = ({ player, records, onClose }) => {
               </div>
               <div className="mt-4 text-center">
                 <p className="text-2xl font-bold text-blue-700">Level {player.level}</p>
-                <p className="text-gray-600">성별: {player.gender} | 등급: <span className="font-bold text-blue-600">{player.group||'일반'}</span></p>
-                <p className="font-bold mt-2">통산 {totalGoals}골 / {totalAssists}어시</p>
+                <p className="text-sm text-gray-600">성별: {player.gender} | 등급: <span className="font-bold text-blue-600">{player.group||'일반'}</span></p>
+                
+                {player.group === '스타즈' && (
+                  <div className="mt-2 bg-blue-50 border border-blue-200 p-2 rounded text-sm text-left inline-block">
+                     <p><b>유형:</b> {player.stars_type}</p>
+                     <p><b>가입일:</b> {player.payment_date || '미등록'}</p>
+                     <p className="flex items-center gap-1"><b>만료일:</b> {player.expire_date || '미등록'} <DdayBadge dday={dday}/></p>
+                  </div>
+                )}
+                {player.group === '게스트' && player.stars_type && (
+                  <div className="mt-2 bg-green-50 border border-green-200 p-2 rounded text-sm text-left inline-block text-green-800">
+                     <p><b>초대자:</b> {player.stars_type}</p>
+                  </div>
+                )}
+                <p className="font-bold mt-3">통산 {totalGoals}골 / {totalAssists}어시</p>
               </div>
             </div>
             <div className="flex-1">
@@ -142,7 +207,6 @@ export default function FutsalCloudApp() {
   const [players, setPlayers] = useState([]);
   const [records, setRecords] = useState([]); 
   
-  // --- 일정 및 시간 관리 상태 ---
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [matchTimeStart, setMatchTimeStart] = useState('20:00');
   const [matchTimeEnd, setMatchTimeEnd] = useState('22:00');
@@ -150,8 +214,13 @@ export default function FutsalCloudApp() {
   const [deadlineTime, setDeadlineTime] = useState('18:00');
 
   const [teamCount, setTeamCount] = useState(2);
-  // group 기본값 추가
-  const [newPlayer, setNewPlayer] = useState({ name: '', gender: '남성', group: '일반', balance: 5, passing: 5, dribble: 5, shooting: 5, touch: 5, stamina: 5 });
+  
+  const defaultNewPlayer = { 
+    name: '', gender: '남성', group: '일반', 
+    stars_type: '연납형', payment_date: new Date().toISOString().split('T')[0], expire_date: '',
+    balance: 5, passing: 5, dribble: 5, shooting: 5, touch: 5, stamina: 5 
+  };
+  const [newPlayer, setNewPlayer] = useState(defaultNewPlayer);
 
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -161,6 +230,11 @@ export default function FutsalCloudApp() {
   const [tempAttendance, setTempAttendance] = useState([]);
   const [showVoteModal, setShowVoteModal] = useState(false);
 
+  // --- 게스트 관리용 상태 ---
+  const [showGuestModal, setShowGuestModal] = useState(false);
+  const [guestForm, setGuestForm] = useState({ name: '', gender: '남성', inviter: '', level: 5 });
+  const [showGuestsInList, setShowGuestsInList] = useState(false);
+
   const [filterGender, setFilterGender] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: 'level', direction: 'desc' });
 
@@ -169,13 +243,8 @@ export default function FutsalCloudApp() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  const socialLinks = {
-    instagram: "https://www.instagram.com", 
-    youtube: "", 
-    kakao: ""      
-  };
+  const socialLinks = { instagram: "https://www.instagram.com", youtube: "", kakao: "" };
 
-  // --- 카카오 SDK & 매직 링크 감지 ---
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -191,13 +260,11 @@ export default function FutsalCloudApp() {
     document.head.appendChild(script);
     script.onload = () => {
       if (!window.Kakao.isInitialized()) {
-        // [중요] 여기에 복사해 둔 'JavaScript 키'를 넣으세요!
         window.Kakao.init('c83bfe5982c44918880b96c17961d52e'); 
       }
     };
   }, []);
 
-  // 날짜 변환 도우미 함수 (예: "2026-04-15" -> { m: 4, d: 15, day: '수' })
   const formatKakaoDate = (dateStr) => {
     if(!dateStr) return { m: '', d: '', day: '' };
     const dt = new Date(dateStr);
@@ -205,38 +272,24 @@ export default function FutsalCloudApp() {
     return { m: dt.getMonth() + 1, d: dt.getDate(), day: days[dt.getDay()] };
   };
 
-  // --- 1. 투표 알림 보내기 (카카오) ---
   const shareVoteNotice = () => {
     if (window.Kakao && window.Kakao.isInitialized()) {
       const match = formatKakaoDate(selectedDate);
       const dead = formatKakaoDate(deadlineDate);
       const magicLinkUrl = `${window.location.origin}${window.location.pathname}?vote=true&date=${selectedDate}`;
-      
-      const text = `[🏁 총총 FC 풋살 모임 투표 안내‼️]\n\n안녕하세요 총총FC 여러분\n${match.m}월 ${match.d}일 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n* 늦참 시 참석투표 후 도착예정시간 댓글 부탁드립니다!\n* 일반회원은 입금완료 시 참석 확정입니다!`;
+      const text = `[🏁 총총 FC 풋살 모임 투표 안내‼️]\n\n안녕하세요 총총FC 여러분\n${match.m}월 ${match.d}일 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n* 일반회원은 입금완료 시 참석 확정입니다!`;
 
-      window.Kakao.Share.sendDefault({
-        objectType: 'text',
-        text: text,
-        link: { mobileWebUrl: magicLinkUrl, webUrl: magicLinkUrl },
-        buttonTitle: '투표하러 가기 👆',
-      });
+      window.Kakao.Share.sendDefault({ objectType: 'text', text: text, link: { mobileWebUrl: magicLinkUrl, webUrl: magicLinkUrl }, buttonTitle: '투표하러 가기 👆' });
     } else { alert('카카오톡 기능을 불러오는 중입니다. 잠시 후 시도해주세요.'); }
   };
 
-  // --- 2. 당일 경기 안내(리마인더) 보내기 (카카오) ---
   const shareMatchReminder = () => {
     if (window.Kakao && window.Kakao.isInitialized()) {
       const match = formatKakaoDate(selectedDate);
       const magicLinkUrl = `${window.location.origin}${window.location.pathname}`;
-      
       const text = `[🏁 총총 FC 풋살 모임 안내‼️]\n\n안녕하세요 총총FC 여러분\n당일 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n* 경기 10분전 도착하시어 환복해주시면 원활한 경기진행이 됩니다\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층`;
 
-      window.Kakao.Share.sendDefault({
-        objectType: 'text',
-        text: text,
-        link: { mobileWebUrl: magicLinkUrl, webUrl: magicLinkUrl },
-        buttonTitle: '웹사이트 확인하기',
-      });
+      window.Kakao.Share.sendDefault({ objectType: 'text', text: text, link: { mobileWebUrl: magicLinkUrl, webUrl: magicLinkUrl }, buttonTitle: '웹사이트 확인하기' });
     } else { alert('카카오톡 기능을 불러오는 중입니다. 잠시 후 시도해주세요.'); }
   };
 
@@ -249,7 +302,7 @@ export default function FutsalCloudApp() {
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       setIsAdmin(!!session);
-      if (!session && (activeTab === 'teams' || activeTab === 'attendance')) {
+      if (!session && (activeTab === 'attendance' || activeTab === 'members')) {
         setActiveTab('players');
       }
     });
@@ -297,14 +350,77 @@ export default function FutsalCloudApp() {
     fetchData();
   };
 
+  // --- 일회성 게스트 1초 추가 ---
+  const handleAddGuest = async (e) => {
+    e.preventDefault();
+    if (!guestForm.name) return;
+    setLoading(true);
+    
+    // stars_type 필드를 재활용해서 초대자 이름을 저장합니다.
+    const newGuestPayload = {
+      name: guestForm.name,
+      gender: guestForm.gender, // 성별 저장
+      group: '게스트',
+      stars_type: guestForm.inviter || null, // 초대자 저장
+      level: guestForm.level,
+      balance: guestForm.level, passing: guestForm.level, dribble: guestForm.level,
+      shooting: guestForm.level, touch: guestForm.level, stamina: guestForm.level
+    };
+
+    const { data, error } = await supabase.from('players').insert([newGuestPayload]).select();
+    if (!error && data && data.length > 0) {
+      await supabase.from('match_records').insert([{ date: selectedDate, player_id: data[0].id }]);
+      alert('게스트가 추가되고 오늘 경기에 자동 참석 처리되었습니다!');
+      setShowGuestModal(false);
+      setGuestForm({ name: '', gender: '남성', inviter: '', level: 5 });
+      fetchData();
+    } else {
+      setLoading(false);
+      alert('추가 실패');
+    }
+  };
+
+  // --- 게스트 일괄 청소 ---
+  const handleClearGuests = async () => {
+    if (!window.confirm('저장된 모든 [게스트] 데이터와 기록이 영구 삭제됩니다.\n정말 삭제하시겠습니까?')) return;
+    setLoading(true);
+    const { error } = await supabase.from('players').delete().eq('group', '게스트');
+    setLoading(false);
+    if (!error) {
+      alert('모든 게스트가 깔끔하게 정리되었습니다.');
+      fetchData();
+    }
+  };
+
+  const handleNewPlayerChange = (field, value) => {
+    let updated = { ...newPlayer, [field]: value };
+    if (updated.group === '스타즈' && (field === 'payment_date' || field === 'stars_type')) {
+      updated.expire_date = calculateExpireDate(updated.stars_type, updated.payment_date);
+    }
+    if (field === 'group' && value === '일반') {
+      updated.stars_type = null; updated.payment_date = null; updated.expire_date = null;
+    }
+    if (field === 'group' && value === '스타즈') {
+      updated.stars_type = '연납형'; updated.payment_date = new Date().toISOString().split('T')[0];
+      updated.expire_date = calculateExpireDate('연납형', updated.payment_date);
+    }
+    setNewPlayer(updated);
+  };
+
   const handleAddPlayer = async () => {
     if (!isAdmin) return alert('운영진만 가능합니다.');
     if (!newPlayer.name) return;
     const level = calculateLevel(newPlayer);
-    const { error } = await supabase.from('players').insert([{ ...newPlayer, level }]);
+    
+    const payload = { ...newPlayer, level };
+    if (payload.group === '일반') {
+      payload.stars_type = null; payload.payment_date = null; payload.expire_date = null;
+    }
+
+    const { error } = await supabase.from('players').insert([payload]);
     if (!error) {
       alert('등록되었습니다.'); fetchData();
-      setNewPlayer({ name: '', gender: '남성', group: '일반', balance: 5, passing: 5, dribble: 5, shooting: 5, touch: 5, stamina: 5 });
+      setNewPlayer(defaultNewPlayer);
     }
   };
 
@@ -313,40 +429,119 @@ export default function FutsalCloudApp() {
     if (window.confirm('삭제하시겠습니까?')) { await supabase.from('players').delete().eq('id', id); fetchData(); }
   };
 
-  const startEditing = (player) => { setEditingId(player.id); setEditForm({ ...player }); };
+  const startEditing = (player) => { 
+    setEditingId(player.id); 
+    setEditForm({ ...player, payment_date: player.payment_date || '', expire_date: player.expire_date || '' }); 
+  };
   const cancelEditing = () => { setEditingId(null); setEditForm({}); };
+  
+  const handleEditChange = (field, value) => {
+    let updated = { ...editForm, [field]: value };
+    if (updated.group === '스타즈' && (field === 'payment_date' || field === 'stars_type' || field === 'group')) {
+      if(field === 'group' && !updated.stars_type) updated.stars_type = '연납형'; 
+      if(updated.payment_date) updated.expire_date = calculateExpireDate(updated.stars_type, updated.payment_date);
+    }
+    setEditForm(updated);
+  };
+
   const saveEditing = async () => {
     const level = calculateLevel(editForm);
-    const { error } = await supabase.from('players').update({ ...editForm, level }).eq('id', editingId);
+    const payload = { ...editForm, level };
+    if (payload.group === '일반' || payload.group === '게스트') {
+      payload.stars_type = payload.group === '게스트' ? payload.stars_type : null; // 게스트는 초대자 유지
+      payload.payment_date = null; payload.expire_date = null;
+    } else {
+      payload.payment_date = payload.payment_date || null;
+      payload.expire_date = payload.expire_date || null;
+    }
+
+    const { error } = await supabase.from('players').update(payload).eq('id', editingId);
     if (!error) { alert('수정 완료'); setEditingId(null); fetchData(); }
   };
 
+  const exportToCSV = () => {
+    const headers = ['이름', '성별', '등급', '가입유형/초대자', '입금일', '만료일', '남은기간'];
+    const rows = players.map(p => {
+      const dday = p.group === '스타즈' ? getDday(p.expire_date) : null;
+      let ddayStr = '';
+      if (dday !== null) ddayStr = dday < 0 ? '만료됨' : `D-${dday}`;
+      return [p.name, p.gender, p.group || '일반', p.stars_type || '-', p.payment_date || '-', p.expire_date || '-', ddayStr].join(',');
+    });
+    const csvContent = "\uFEFF" + headers.join(',') + '\n' + rows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `총총FC_회원명단_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // --- 패키지(초대자+게스트) 팀 밸런싱 배정 ---
   const generateTeams = async () => {
     const currentDayRecords = records.filter(r => r.date === selectedDate);
     if (!currentDayRecords.length) return alert('참여 인원이 없습니다.');
-    if (!window.confirm('팀을 새로 배정하시겠습니까? (기존 배정 초기화)\n*누를 때마다 구성이 조금씩 달라집니다.')) return;
+    if (!window.confirm('팀을 새로 배정하시겠습니까? (기존 배정 초기화)\n* 초대자와 게스트는 무조건 같은 팀으로 배정됩니다.')) return;
 
     const currentDayPlayerIds = currentDayRecords.map(r => r.player_id);
     const attendedPlayers = players.filter(p => currentDayPlayerIds.includes(p.id));
-    const noise = () => Math.random() * 0.5 - 0.25;
+    const noise = () => Math.random() * 0.5 - 0.25; 
 
-    const males = attendedPlayers.filter(p => p.gender === '남성').sort((a, b) => (b.level + noise()) - (a.level + noise()));
-    const females = attendedPlayers.filter(p => p.gender === '여성').sort((a, b) => (b.level + noise()) - (a.level + noise()));
-    const teams = Array.from({ length: teamCount }, () => []);
+    const bundles = [];
+    const processedIds = new Set();
+    const regulars = attendedPlayers.filter(p => p.group !== '게스트');
+    const guests = attendedPlayers.filter(p => p.group === '게스트');
 
-    females.forEach((p, i) => {
-      const idx = (Math.floor(i / teamCount) % 2 === 0) ? (i % teamCount) : (teamCount - 1 - (i % teamCount));
-      teams[idx].push(p);
+    regulars.forEach(inviter => {
+        const myGuests = guests.filter(g => g.stars_type === inviter.name);
+        if (myGuests.length > 0) {
+            const bundle = [inviter, ...myGuests];
+            bundles.push(bundle);
+            bundle.forEach(b => processedIds.add(b.id)); 
+        }
     });
 
-    males.forEach((p) => {
-      let targetIdx = 0, minSum = Infinity;
-      const indices = Array.from({length: teamCount}, (_, i) => i).sort(() => Math.random() - 0.5);
-      for (let idx of indices) {
-        const sum = teams[idx].reduce((acc, curr) => acc + curr.level, 0);
-        if (sum < minSum) { minSum = sum; targetIdx = idx; }
-      }
-      teams[targetIdx].push(p);
+    const singles = attendedPlayers.filter(p => !processedIds.has(p.id));
+    const singleFemales = singles.filter(p => p.gender === '여성').sort((a,b) => (b.level+noise()) - (a.level+noise()));
+    const singleMales = singles.filter(p => p.gender === '남성').sort((a,b) => (b.level+noise()) - (a.level+noise()));
+
+    const teams = Array.from({ length: teamCount }, () => []);
+
+    bundles.sort((a, b) => b.reduce((s,p)=>s+p.level,0) - a.reduce((s,p)=>s+p.level,0));
+    
+    bundles.forEach(bundle => {
+        let targetIdx = 0; let minSum = Infinity;
+        const minSize = Math.min(...teams.map(t => t.length));
+        const candidates = teams.map((t, i) => t.length === minSize ? i : -1).filter(i => i !== -1);
+        
+        for (let idx of (candidates.length > 0 ? candidates : [0])) {
+            const sum = teams[idx].reduce((acc, curr) => acc + curr.level, 0);
+            if (sum < minSum) { minSum = sum; targetIdx = idx; }
+        }
+        teams[targetIdx].push(...bundle);
+    });
+
+    singleFemales.forEach(p => {
+        const minSize = Math.min(...teams.map(t => t.length));
+        const candidates = teams.map((t, i) => t.length === minSize ? i : -1).filter(i => i !== -1);
+        let targetIdx = candidates[0]; let minSum = Infinity;
+        for (let idx of candidates) {
+            const sum = teams[idx].reduce((acc, curr) => acc + curr.level, 0);
+            if (sum < minSum) { minSum = sum; targetIdx = idx; }
+        }
+        teams[targetIdx].push(p);
+    });
+
+    singleMales.forEach(p => {
+        const minSize = Math.min(...teams.map(t => t.length));
+        const candidates = teams.map((t, i) => t.length === minSize ? i : -1).filter(i => i !== -1);
+        let targetIdx = candidates[0]; let minSum = Infinity;
+        for (let idx of candidates) {
+            const sum = teams[idx].reduce((acc, curr) => acc + curr.level, 0);
+            if (sum < minSum) { minSum = sum; targetIdx = idx; }
+        }
+        teams[targetIdx].push(p);
     });
 
     const updates = [];
@@ -355,7 +550,7 @@ export default function FutsalCloudApp() {
     });
 
     const { error } = await supabase.from('match_records').upsert(updates, { onConflict: 'date, player_id' });
-    if (!error) { alert('팀 생성 완료!'); fetchData(); }
+    if (!error) { alert('팀 배정 완료!'); fetchData(); }
   };
 
   const updateStat = async (pid, field, value) => {
@@ -371,14 +566,18 @@ export default function FutsalCloudApp() {
 
   const processedPlayers = useMemo(() => {
     let data = [...players];
+    if (!showGuestsInList) {
+      data = data.filter(p => p.group !== '게스트');
+    }
     if (filterGender !== 'all') data = data.filter(p => p.gender === filterGender);
+    
     data.sort((a, b) => {
       if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
       if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
     return data;
-  }, [players, filterGender, sortConfig]);
+  }, [players, filterGender, sortConfig, showGuestsInList]);
 
   const handleSort = (key) => {
     let direction = 'desc';
@@ -393,7 +592,9 @@ export default function FutsalCloudApp() {
 
   const rankings = useMemo(() => {
     const stats = {};
-    players.forEach(p => { stats[p.id] = { name: p.name, group: p.group, gender: p.gender, goals: 0, assists: 0 }; });
+    players.filter(p => p.group !== '게스트').forEach(p => { 
+      stats[p.id] = { name: p.name, group: p.group, expire_date: p.expire_date, gender: p.gender, goals: 0, assists: 0 }; 
+    });
     records.forEach(r => {
       if (stats[r.player_id]) { stats[r.player_id].goals += r.goals; stats[r.player_id].assists += r.assists; }
     });
@@ -428,7 +629,6 @@ export default function FutsalCloudApp() {
   return (
     <div className="min-h-screen bg-gray-100 font-sans pb-20 text-gray-800 relative">
       
-      {/* 게스트용 떠다니는 투표 버튼 */}
       {!isAdmin && (
         <button onClick={() => setShowVoteModal(true)}
           className="fixed bottom-8 right-6 bg-blue-600 text-white px-5 py-4 rounded-full shadow-2xl hover:bg-blue-700 hover:scale-105 transition-transform z-40 flex items-center justify-center gap-2 border-2 border-white">
@@ -437,14 +637,8 @@ export default function FutsalCloudApp() {
         </button>
       )}
 
-      {/* 우측 플로팅 소셜 배너 */}
       <div className="hidden lg:flex flex-col gap-4 fixed right-8 top-1/2 -translate-y-1/2 z-30">
-        {socialLinks.instagram && (
-          <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" 
-             className="bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 p-3 rounded-full text-white shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="인스타그램">
-            <Instagram size={24} />
-          </a>
-        )}
+        {socialLinks.instagram && ( <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 p-3 rounded-full text-white shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="인스타그램"><Instagram size={24} /></a>)}
         {socialLinks.youtube && ( <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="..."> <Youtube size={24} /> </a> )}
         {socialLinks.kakao && ( <a href={socialLinks.kakao} target="_blank" rel="noopener noreferrer" className="..."> <MessageCircle size={24} /> </a> )}
       </div>
@@ -459,7 +653,6 @@ export default function FutsalCloudApp() {
           </div>
         </div>
         
-        {/* 로그인 / 로그아웃 & 새로고침 버튼 */}
         <div className="flex items-center gap-3">
           {isAdmin ? (
             <button onClick={handleLogout} className="flex items-center gap-1 bg-red-500 px-3 py-1.5 rounded text-sm font-bold hover:bg-red-600 transition-colors">
@@ -477,12 +670,13 @@ export default function FutsalCloudApp() {
       {/* --- 네비게이션 --- */}
       <nav className="flex bg-white border-b overflow-x-auto sticky top-14 z-30">
         {[
-          { id: 'players', icon: Users, label: '선수' },
-          isAdmin && { id: 'attendance', icon: Calendar, label: '참여(투표) 관리' },
-          isAdmin && { id: 'teams', icon: UserCheck, label: '팀/기록 관리' },
+          { id: 'players', icon: Users, label: '선수 목록' },
+          isAdmin && { id: 'members', icon: Download, label: '회원 장부' }, 
+          isAdmin && { id: 'attendance', icon: Calendar, label: '투표 관리' },
+          { id: 'teams', icon: UserCheck, label: '팀/기록' }, 
           { id: 'scoreboard', icon: Trophy, label: '랭킹' },
         ].filter(Boolean).map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 flex flex-col items-center p-3 text-xs font-bold ${activeTab===tab.id ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 flex flex-col items-center p-3 text-xs font-bold whitespace-nowrap ${activeTab===tab.id ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>
             <tab.icon size={20} className="mb-1"/>{tab.label}
           </button>
         ))}
@@ -494,33 +688,51 @@ export default function FutsalCloudApp() {
         {activeTab === 'players' && (
           <>
             {isAdmin && (
-              <Card title="선수 등록 (운영진 전용)">
-                <div className="flex gap-2 mb-2">
-                  <input placeholder="이름" className="border p-2 rounded w-24" value={newPlayer.name} onChange={e=>setNewPlayer({...newPlayer, name:e.target.value})}/>
-                  <select className="border p-2 rounded" value={newPlayer.gender} onChange={e=>setNewPlayer({...newPlayer, gender:e.target.value})}><option>남성</option><option>여성</option></select>
-                  {/* 등급(그룹) 선택 추가 */}
-                  <select className="border p-2 rounded bg-yellow-50 text-yellow-900 font-bold" value={newPlayer.group} onChange={e=>setNewPlayer({...newPlayer, group:e.target.value})}>
+              <Card title="회원 등록 (운영진 전용)">
+                <div className="flex flex-wrap gap-2 mb-2 items-center">
+                  <input placeholder="이름" className="border p-2 rounded w-24" value={newPlayer.name} onChange={e=>handleNewPlayerChange('name', e.target.value)}/>
+                  <select className="border p-2 rounded" value={newPlayer.gender} onChange={e=>handleNewPlayerChange('gender', e.target.value)}><option>남성</option><option>여성</option></select>
+                  <select className="border p-2 rounded bg-yellow-50 text-yellow-900 font-bold" value={newPlayer.group} onChange={e=>handleNewPlayerChange('group', e.target.value)}>
                     <option value="일반">일반 회원</option>
                     <option value="스타즈">스타즈 ⭐️</option>
                   </select>
                 </div>
+                
+                {newPlayer.group === '스타즈' && (
+                  <div className="flex flex-wrap gap-3 items-center bg-blue-50 p-3 rounded-lg border border-blue-200 mb-3 shadow-inner">
+                    <span className="font-bold text-sm text-blue-800 shrink-0"><Star size={16} className="inline mr-1"/>스타즈 관리:</span>
+                    <select className="border p-1.5 rounded text-sm bg-white" value={newPlayer.stars_type} onChange={e=>handleNewPlayerChange('stars_type', e.target.value)}>
+                      <option value="연납형">연납형 (12만원)</option>
+                      <option value="반납형">반납형 (6만원, 4개월)</option>
+                    </select>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-bold text-gray-600">입금일:</span>
+                      <input type="date" className="border p-1.5 rounded text-sm bg-white w-32" value={newPlayer.payment_date} onChange={e=>handleNewPlayerChange('payment_date', e.target.value)}/>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-bold text-gray-600">만료일:</span>
+                      <input type="date" className="border p-1.5 rounded text-sm bg-gray-200 text-red-600 font-bold w-32" value={newPlayer.expire_date || ''} readOnly title="자동 계산됩니다"/>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-6 gap-1 mb-3">
                   {['balance','passing','dribble','shooting','touch','stamina'].map(s=>(
                     <div key={s} className="text-center">
                       <div className="text-[10px] uppercase font-bold text-gray-500">{s.slice(0,3)}</div>
                       <input type="number" min="0" max="10" className="w-full border text-center rounded" value={newPlayer[s]} onChange={e=>{
                           const val = Number(e.target.value);
-                          if(val >= 0 && val <= 10) setNewPlayer({...newPlayer, [s]:e.target.value});
+                          if(val >= 0 && val <= 10) handleNewPlayerChange(s, e.target.value);
                       }}/>
                     </div>
                   ))}
                 </div>
-                <button onClick={handleAddPlayer} className="w-full bg-green-600 text-white py-2 rounded font-bold flex justify-center items-center gap-1"><Plus size={16}/> 등록하기</button>
+                <button onClick={handleAddPlayer} className="w-full bg-green-600 text-white py-2 rounded font-bold flex justify-center items-center gap-1"><Plus size={16}/> 명단에 추가하기</button>
               </Card>
             )}
 
             <div className="bg-white rounded shadow overflow-hidden">
-              <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
+              <div className="p-3 border-b bg-gray-50 flex flex-col sm:flex-row justify-between items-center gap-3">
                  <div className="flex gap-1">
                    {['all', '남성', '여성'].map(f => (
                      <button key={f} onClick={()=>setFilterGender(f)}
@@ -529,14 +741,25 @@ export default function FutsalCloudApp() {
                      </button>
                    ))}
                  </div>
-                 <span className="text-xs text-gray-500">* 더블클릭 상세정보</span>
+                 
+                 <div className="flex items-center gap-2">
+                   <button onClick={() => setShowGuestsInList(!showGuestsInList)} className={`text-xs px-2 py-1 border rounded font-bold transition-colors ${showGuestsInList ? 'bg-green-100 text-green-800 border-green-300' : 'bg-white text-gray-500 border-gray-300'}`}>
+                     {showGuestsInList ? '✔️ 게스트 포함해서 보는 중' : '게스트 숨기기'}
+                   </button>
+                   {isAdmin && showGuestsInList && (
+                     <button onClick={handleClearGuests} className="text-xs px-2 py-1 bg-red-100 text-red-600 border border-red-300 rounded hover:bg-red-200">
+                       🧹 게스트 일괄 삭제
+                     </button>
+                   )}
+                 </div>
               </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-center whitespace-nowrap">
                   <thead className="bg-gray-100 text-gray-700 font-bold border-b">
                     <tr>
-                      <th className="p-3 cursor-pointer hover:bg-gray-200" onClick={()=>handleSort('name')}>이름 <SortIcon colKey="name"/></th>
-                      <th className="p-3 cursor-pointer hover:bg-gray-200" onClick={()=>handleSort('gender')}>성별 <SortIcon colKey="gender"/></th>
+                      <th className="p-3 cursor-pointer hover:bg-gray-200" onClick={()=>handleSort('name')}>이름/회원 <SortIcon colKey="name"/></th>
+                      <th className="p-3">성별</th>
                       <th className="p-3">능력치</th>
                       <th className="p-3 text-blue-600 cursor-pointer hover:bg-gray-200" onClick={()=>handleSort('level')}>Lv <SortIcon colKey="level"/></th>
                       {isAdmin && <th className="p-3">관리</th>}
@@ -545,16 +768,19 @@ export default function FutsalCloudApp() {
                   <tbody>
                     {processedPlayers.map(p => {
                       const isEditing = editingId === p.id;
+                      
                       return (
-                      <tr key={p.id} className="border-b hover:bg-gray-50 cursor-pointer" onDoubleClick={() => setDetailPlayer(p)}>
+                      <tr key={p.id} className={`border-b hover:bg-gray-50 cursor-pointer ${p.group === '게스트' ? 'bg-green-50/30' : ''}`} onDoubleClick={() => setDetailPlayer(p)}>
                         {isEditing ? (
                           <>
-                            <td className="p-2"><input className="border w-16 text-center" value={editForm.name} onChange={e=>setEditForm({...editForm, name:e.target.value})}/></td>
-                            <td className="p-2">
-                              <select className="border text-xs" value={editForm.gender} onChange={e=>setEditForm({...editForm, gender:e.target.value})}><option>남성</option><option>여성</option></select>
-                              <select className="border text-xs mt-1 bg-yellow-50" value={editForm.group||'일반'} onChange={e=>setEditForm({...editForm, group:e.target.value})}><option value="일반">일반</option><option value="스타즈">스타즈</option></select>
+                            <td className="p-2 flex flex-col gap-1 items-center">
+                              <input className="border w-20 text-center text-sm" value={editForm.name} onChange={e=>handleEditChange('name',e.target.value)}/>
+                              <select className="border text-xs bg-yellow-50" value={editForm.group||'일반'} onChange={e=>handleEditChange('group',e.target.value)}>
+                                <option value="일반">일반</option><option value="스타즈">스타즈</option><option value="게스트">게스트</option>
+                              </select>
                             </td>
-                            <td className="p-2"><div className="flex gap-1 justify-center">{['balance','passing','dribble','shooting','touch','stamina'].map(s => <input key={s} type="number" min="0" max="10" className="border w-8 text-center" value={editForm[s]} onChange={e=>setEditForm({...editForm, [s]:Number(e.target.value)})}/>)}</div></td>
+                            <td className="p-2"><select className="border text-sm" value={editForm.gender} onChange={e=>handleEditChange('gender',e.target.value)}><option>남성</option><option>여성</option></select></td>
+                            <td className="p-2"><div className="flex gap-1 justify-center">{['balance','passing','dribble','shooting','touch','stamina'].map(s => <input key={s} type="number" min="0" max="10" className="border w-8 text-center" value={editForm[s]} onChange={e=>handleEditChange(s,Number(e.target.value))}/>)}</div></td>
                             <td className="p-2 font-bold text-blue-600">-</td>
                             {isAdmin && (
                               <td className="p-2 flex justify-center gap-2">
@@ -565,8 +791,11 @@ export default function FutsalCloudApp() {
                           </>
                         ) : (
                           <>
-                            {/* 스타즈 별 아이콘 적용 */}
-                            <td className="p-3 flex justify-center"><PlayerName player={p}/></td>
+                            <td className="p-3">
+                               <div className="flex flex-col items-center justify-center">
+                                 <PlayerName player={p}/>
+                               </div>
+                            </td>
                             <td className="p-3"><span className={`px-2 py-1 rounded text-xs ${p.gender==='남성'?'bg-blue-100 text-blue-800':'bg-pink-100 text-pink-800'}`}>{p.gender}</span></td>
                             <td className="p-3 text-gray-500 text-xs">{p.balance}/{p.passing}/{p.dribble}/{p.shooting}/{p.touch}/{p.stamina}</td>
                             <td className="p-3 font-bold text-blue-600">{p.level}</td>
@@ -580,6 +809,9 @@ export default function FutsalCloudApp() {
                         )}
                       </tr>
                     )})}
+                    {processedPlayers.length === 0 && (
+                      <tr><td colSpan="5" className="p-4 text-gray-400">명단이 비어있습니다.</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -587,13 +819,53 @@ export default function FutsalCloudApp() {
           </>
         )}
 
-        {/* --- 2. 참여 관리 (운영진 전용) --- */}
+        {/* --- 2. 회원 장부 관리 (운영진 전용) --- */}
+        {isAdmin && activeTab === 'members' && (
+          <Card title="회원 장부 (운영진 전용)">
+            <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+              <p className="text-sm text-gray-600 font-medium">전체 회원의 멤버십 상태를 확인하고 엑셀로 다운로드합니다. (게스트 제외)</p>
+              <button onClick={exportToCSV} className="w-full md:w-auto bg-green-600 text-white px-5 py-2 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-green-700 shadow border-2 border-green-700">
+                <Download size={18} /> 엑셀(CSV) 내보내기
+              </button>
+            </div>
+            <div className="overflow-x-auto bg-white border rounded shadow-sm">
+              <table className="w-full text-sm text-center whitespace-nowrap">
+                <thead className="bg-gray-100 text-gray-700 font-bold border-b">
+                  <tr>
+                    <th className="p-3">이름</th>
+                    <th className="p-3">등급</th>
+                    <th className="p-3">가입유형</th>
+                    <th className="p-3">입금일</th>
+                    <th className="p-3 text-red-600">만료일</th>
+                    <th className="p-3">상태</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {players.filter(p => p.group !== '게스트').map(p => {
+                    const isStar = p.group === '스타즈';
+                    const dday = isStar ? getDday(p.expire_date) : null;
+                    return (
+                      <tr key={p.id} className="border-b hover:bg-gray-50">
+                        <td className="p-3 font-medium"><PlayerName player={p}/></td>
+                        <td className="p-3"><span className={`px-2 py-1 rounded text-xs font-bold ${isStar ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'}`}>{p.group || '일반'}</span></td>
+                        <td className="p-3 text-gray-600">{p.stars_type || '-'}</td>
+                        <td className="p-3 text-gray-600">{p.payment_date || '-'}</td>
+                        <td className="p-3 font-bold text-red-600">{p.expire_date || '-'}</td>
+                        <td className="p-3"><DdayBadge dday={dday}/></td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+
+        {/* --- 3. 참여 관리 (운영진 전용) --- */}
         {isAdmin && activeTab === 'attendance' && (
           <>
             <Card title="이번 주 투표/경기 관리">
               <div className="flex flex-col gap-4">
-                
-                {/* 시간 및 마감 설정 */}
                 <div className="bg-gray-50 p-4 rounded border space-y-3">
                   <div className="flex flex-col md:flex-row items-center gap-4">
                       <div className="flex items-center gap-2 w-full md:w-1/2">
@@ -619,7 +891,6 @@ export default function FutsalCloudApp() {
                   </div>
                 </div>
                 
-                {/* 카카오톡 버튼 2개 */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <button onClick={shareVoteNotice} className="bg-[#FEE500] text-[#191919] px-4 py-3 rounded-lg font-bold hover:bg-[#e5cf00] flex items-center justify-center gap-2 shadow border border-yellow-400">
                     <MessageCircle size={20} className="fill-current"/> 1. 투표 열기 (카톡 공유)
@@ -628,6 +899,14 @@ export default function FutsalCloudApp() {
                     <Bell size={20} /> 2. 당일 경기 안내 (카톡 공유)
                   </button>
                 </div>
+                
+                {/* 빠른 게스트 추가 버튼 */}
+                <div className="border-t pt-4 mt-2">
+                  <button onClick={() => setShowGuestModal(true)} className="w-full bg-green-100 text-green-700 border-2 border-green-500 px-4 py-2 rounded-lg font-bold hover:bg-green-200 flex items-center justify-center gap-2 border-dashed">
+                    <UserPlus size={18}/> 오늘 일회성 게스트 빠른 추가 (1초 컷)
+                  </button>
+                </div>
+
               </div>
             </Card>
             
@@ -654,48 +933,69 @@ export default function FutsalCloudApp() {
           </>
         )}
 
-        {/* --- 3. 팀/기록 관리 (운영진 전용) --- */}
-        {isAdmin && activeTab === 'teams' && (
+        {/* --- 4. 팀/기록 관리 (모두 볼 수 있음) --- */}
+        {activeTab === 'teams' && (
           <>
+            {/* 상단 컨트롤 바 */}
             <div className="bg-white p-4 rounded shadow border-l-4 border-blue-600 flex flex-col md:flex-row justify-between items-center gap-4">
                <div className="flex items-center gap-2">
-                 <span className="font-bold text-sm">날짜:</span>
-                 <input type="date" className="border p-1 rounded font-bold" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)}/>
+                 <span className="font-bold text-sm">경기 날짜:</span>
+                 <input type="date" className="border p-2 rounded font-bold bg-gray-50" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)}/>
                </div>
-               <div className="flex items-center gap-2">
-                 <span className="font-bold text-sm">팀 수:</span>
-                 <input type="number" value={teamCount} onChange={e=>setTeamCount(e.target.value)} className="border p-1 w-12 text-center rounded"/>
-               </div>
-               <button onClick={generateTeams} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold shadow hover:bg-blue-700">팀 생성/초기화</button>
+               
+               {/* 운영진만 조작 가능 */}
+               {isAdmin && (
+                 <div className="flex items-center gap-3">
+                   <div className="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded">
+                     <span className="font-bold text-sm">생성할 팀 수:</span>
+                     <input type="number" value={teamCount} onChange={e=>setTeamCount(e.target.value)} className="border p-1 w-12 text-center rounded bg-white"/>
+                   </div>
+                   <button onClick={generateTeams} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold shadow hover:bg-blue-700 flex items-center gap-1">
+                     <RefreshCw size={14}/> 팀 자동 배정 (패키지 고려)
+                   </button>
+                 </div>
+               )}
             </div>
 
-            <Card title="대기 명단 (투표 완료 인원)">
-               <div className="flex flex-wrap gap-2">
-                  {records.filter(r => r.date === selectedDate).map(r => {
-                      const p = players.find(pl => pl.id === r.player_id);
-                      if (!p) return null;
-                      const isAssigned = r.team > 0;
-                      return (
-                        <div key={r.id} className={`px-3 py-1 rounded border text-sm font-bold flex items-center gap-2 ${isAssigned ? 'bg-gray-100 text-gray-500' : 'bg-blue-50 text-blue-700 border-blue-300'}`}>
-                           <PlayerName player={p}/>
-                           <span className="text-xs bg-white px-1 rounded border">Lv.{p.level}</span>
-                           {isAssigned && <span className="text-xs text-green-600">→ 팀{r.team}</span>}
-                        </div>
-                      )
-                  })}
-                  {records.filter(r => r.date === selectedDate).length === 0 && <span className="text-gray-400">투표한 인원이 없습니다.</span>}
-               </div>
-            </Card>
+            {/* 대기 명단 (운영진에게만 보임) */}
+            {isAdmin && (
+              <Card title="대기 명단 (투표 완료 인원)">
+                 <div className="flex flex-wrap gap-2">
+                    {records.filter(r => r.date === selectedDate).map(r => {
+                        const p = players.find(pl => pl.id === r.player_id);
+                        if (!p) return null;
+                        const isAssigned = r.team > 0;
+                        return (
+                          <div key={r.id} className={`px-3 py-1 rounded border text-sm font-bold flex items-center gap-2 ${isAssigned ? 'bg-gray-100 text-gray-500' : 'bg-blue-50 text-blue-700 border-blue-300'}`}>
+                             <PlayerName player={p}/>
+                             <span className="text-xs bg-white px-1 rounded border ml-1">Lv.{p.level}</span>
+                             {isAssigned && <span className="text-xs text-green-600 ml-1">→ 팀{r.team}</span>}
+                          </div>
+                        )
+                    })}
+                    {records.filter(r => r.date === selectedDate).length === 0 && <span className="text-gray-400">투표한 인원이 없습니다.</span>}
+                 </div>
+              </Card>
+            )}
 
+            {/* 구성된 팀 목록 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {Array.from({length: teamCount}).map((_, i) => {
                 const teamNo = i + 1;
                 const members = records.filter(r => r.date === selectedDate && r.team === teamNo);
                 const teamPlayers = members.map(r => players.find(p => p.id === r.player_id)).filter(Boolean);
+                
                 const avg = teamPlayers.length ? (teamPlayers.reduce((a,b)=>a+b.level,0)/teamPlayers.length).toFixed(2) : 0;
+                const maleCount = teamPlayers.filter(p => p.gender === '남성').length;
+                const femaleCount = teamPlayers.filter(p => p.gender === '여성').length;
 
                 return (
-                  <Card key={teamNo} title={`TEAM ${teamNo} (평균: ${avg})`}>
+                  <Card key={teamNo} title={`TEAM ${teamNo}`}>
+                    <div className="text-xs text-gray-500 mb-3 flex justify-between border-b pb-2">
+                      <span className="font-bold">총 {teamPlayers.length}명 <span className="font-normal">(남{maleCount} / 여{femaleCount})</span></span>
+                      <span>평균 Lv.{avg}</span>
+                    </div>
+
                     {members.length === 0 ? <div className="text-center text-gray-400 py-4">팀원이 없습니다.</div> : 
                       <div className="space-y-3">
                         {members.map(record => {
@@ -704,25 +1004,37 @@ export default function FutsalCloudApp() {
                           return (
                             <div key={record.id} className="bg-gray-50 p-2 rounded border flex flex-col gap-2">
                               <div className="flex justify-between items-center">
-                                <span className="font-bold flex items-center gap-1">
-                                  <span className={`w-2 h-2 rounded-full ${p.gender==='남성'?'bg-blue-500':'bg-pink-500'}`}></span>
+                                <span className="font-bold flex items-center gap-1 text-sm md:text-base">
+                                  <span className={`w-2 h-2 rounded-full shrink-0 ${p.gender==='남성'?'bg-blue-500':'bg-pink-500'}`}></span>
                                   <PlayerName player={p}/>
+                                  <span className="text-xs text-gray-400 font-normal shrink-0">({p.level})</span>
                                 </span>
-                                <button onClick={()=>setMovePlayerTarget({ p, teamNo: record.team })} 
-                                        className="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded flex items-center gap-1">
-                                    <ArrowRightLeft size={12}/> 이동
-                                </button>
+                                
+                                {isAdmin && (
+                                  <button onClick={()=>setMovePlayerTarget({ p, teamNo: record.team })} 
+                                          className="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded flex items-center gap-1 shrink-0">
+                                      <ArrowRightLeft size={12}/> 이동
+                                  </button>
+                                )}
                               </div>
                               <div className="flex gap-2">
-                                <div className="flex-1 flex items-center bg-white border rounded px-2">
+                                <div className="flex-1 flex items-center bg-white border rounded px-2 py-1">
                                   <span className="text-xs font-bold text-gray-500 mr-2">골</span>
-                                  <input type="number" min="0" className="w-full text-center font-bold text-blue-600 outline-none" 
-                                    value={record.goals} onChange={(e)=>updateStat(p.id, 'goals', e.target.value)}/>
+                                  {isAdmin ? (
+                                    <input type="number" min="0" className="w-full text-center font-bold text-blue-600 outline-none" 
+                                      value={record.goals} onChange={(e)=>updateStat(p.id, 'goals', e.target.value)}/>
+                                  ) : (
+                                    <span className="w-full text-center font-bold text-blue-600">{record.goals}</span>
+                                  )}
                                 </div>
-                                <div className="flex-1 flex items-center bg-white border rounded px-2">
+                                <div className="flex-1 flex items-center bg-white border rounded px-2 py-1">
                                   <span className="text-xs font-bold text-gray-500 mr-2">어시</span>
-                                  <input type="number" min="0" className="w-full text-center font-bold text-green-600 outline-none" 
-                                    value={record.assists} onChange={(e)=>updateStat(p.id, 'assists', e.target.value)}/>
+                                  {isAdmin ? (
+                                    <input type="number" min="0" className="w-full text-center font-bold text-green-600 outline-none" 
+                                      value={record.assists} onChange={(e)=>updateStat(p.id, 'assists', e.target.value)}/>
+                                  ) : (
+                                    <span className="w-full text-center font-bold text-green-600">{record.assists}</span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -737,7 +1049,7 @@ export default function FutsalCloudApp() {
           </>
         )}
 
-        {/* --- 4. 랭킹 --- */}
+        {/* --- 5. 랭킹 --- */}
         {activeTab === 'scoreboard' && (
           <div className="grid grid-cols-2 gap-4 h-full items-start">
              <div className="flex flex-col gap-4">
@@ -751,6 +1063,54 @@ export default function FutsalCloudApp() {
           </div>
         )}
       </main>
+
+      {/* --- 빠른 게스트 추가 팝업 --- */}
+      {showGuestModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+          <form onSubmit={handleAddGuest} className="bg-white rounded-lg w-full max-w-sm flex flex-col shadow-2xl overflow-hidden border-2 border-green-500">
+            <div className="bg-green-600 text-white p-4 flex justify-between items-center">
+              <h2 className="text-lg font-bold flex items-center gap-2"><UserPlus size={20}/> 당일 게스트 1초 추가</h2>
+              <button type="button" onClick={() => setShowGuestModal(false)}><X size={24} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-bold mb-1 text-gray-700">게스트 이름 <span className="text-red-500">*</span></label>
+                <input required type="text" className="w-full border p-2 rounded" placeholder="예: 홍길동"
+                  value={guestForm.name} onChange={e=>setGuestForm({...guestForm, name:e.target.value})}/>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-bold mb-1 text-gray-700">성별</label>
+                  <select className="w-full border p-2 rounded" value={guestForm.gender} onChange={e=>setGuestForm({...guestForm, gender:e.target.value})}>
+                    <option>남성</option><option>여성</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1 text-gray-700">기본 실력(1~10)</label>
+                  <input type="number" min="1" max="10" className="w-full border p-2 rounded text-center" 
+                    value={guestForm.level} onChange={e=>setGuestForm({...guestForm, level:Number(e.target.value)})}/>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-1 text-blue-700">누가 초대했나요? (옵션)</label>
+                <select className="w-full border-2 border-blue-300 p-2 rounded bg-blue-50 text-blue-900 font-bold" 
+                  value={guestForm.inviter} onChange={e=>setGuestForm({...guestForm, inviter:e.target.value})}>
+                  <option value="">-- 선택 안함 (무작위 배정) --</option>
+                  {players.filter(p => p.group !== '게스트').sort((a,b)=>a.name.localeCompare(b.name)).map(p => (
+                    <option key={p.id} value={p.name}>{p.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">* 선택하면 시스템이 이 두 명을 <b>무조건 같은 팀</b>으로 배정합니다.</p>
+              </div>
+            </div>
+            <div className="p-4 border-t bg-gray-50 flex gap-2">
+               <button type="submit" disabled={loading} className="flex-1 bg-green-600 text-white py-2.5 rounded font-bold shadow hover:bg-green-700">
+                 {loading ? '추가 중...' : '추가 + 바로 투표 반영'}
+               </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* --- 게스트용 투표 팝업 --- */}
       {showVoteModal && (
@@ -778,7 +1138,7 @@ export default function FutsalCloudApp() {
                         <div key={p.id} onClick={()=>handleToggleAttendance(p.id)}
                              className={`p-2.5 rounded border cursor-pointer flex justify-between items-center transition-all ${isChecked ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500 shadow-md' : 'bg-white hover:bg-gray-50'}`}>
                           <PlayerName player={p}/>
-                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isChecked?'bg-blue-600 border-blue-600':'border-gray-300'}`}>
+                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ml-2 ${isChecked?'bg-blue-600 border-blue-600':'border-gray-300'}`}>
                             {isChecked && <UserCheck size={12} className="text-white"/>}
                           </div>
                         </div>
