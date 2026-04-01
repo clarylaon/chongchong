@@ -15,8 +15,8 @@ import {
 // --------------------------------------------------------
 // [중요] Supabase 키 (기존 것 그대로 유지!)
 // --------------------------------------------------------
-const supabaseUrl = '여기에_Project_URL_입력';
-const supabaseKey = '여기에_anon_public_key_입력';
+const supabaseUrl = 'https://vgbrgrlosalarnszmanm.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZnYnJncmxvc2FsYXJuc3ptYW5tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczMzE3NzQsImV4cCI6MjA4MjkwNzc3NH0.py9Bw6NMHFOGAI8daiKrU7IQfTrQh3rsQ6L-qkYIBg0';
 // --------------------------------------------------------
 
 const supabase = createClient(supabaseUrl, supabaseKey);
