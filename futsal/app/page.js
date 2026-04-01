@@ -14,7 +14,7 @@ import {
 } from 'recharts';
 
 // --------------------------------------------------------
-// [중요] Supabase 키
+// [중요] Supabase 키 (반드시 본인의 진짜 키로 바꿔주세요!)
 // --------------------------------------------------------
 const supabaseUrl = 'https://vgbrgrlosalarnszmanm.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZnYnJncmxvc2FsYXJuc3ptYW5tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczMzE3NzQsImV4cCI6MjA4MjkwNzc3NH0.py9Bw6NMHFOGAI8daiKrU7IQfTrQh3rsQ6L-qkYIBg0';
@@ -66,7 +66,7 @@ const DdayBadge = ({ dday }) => {
   return null;
 };
 
-// [핵심 변경] 이름 옆 파란 별 & 게스트 뱃지 + 초대자 꼬리표
+// 이름 옆 파란 별 & 게스트 뱃지 + 초대자 꼬리표
 const PlayerName = ({ player }) => {
   const isStar = player.group === '스타즈';
   const isGuest = player.group === '게스트';
@@ -100,7 +100,7 @@ const Card = ({ title, children, className = "" }) => (
 const MoveTeamModal = ({ player, currentTeam, teamCount, onMove, onClose }) => {
   if (!player) return null;
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[80] p-4">
       <div className="bg-white rounded-lg w-full max-w-sm p-6 shadow-2xl">
         <h3 className="text-lg font-bold mb-4 text-center">{player.name} 팀 이동</h3>
         <div className="grid grid-cols-2 gap-3">
@@ -137,7 +137,7 @@ const PlayerDetailModal = ({ player, records, onClose }) => {
   ];
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[80] p-4">
       <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
         <div className="bg-blue-700 text-white p-4 flex justify-between items-center">
           <h2 className="text-xl font-bold"><PlayerName player={player}/> 상세 정보</h2>
@@ -260,6 +260,7 @@ export default function FutsalCloudApp() {
     document.head.appendChild(script);
     script.onload = () => {
       if (!window.Kakao.isInitialized()) {
+        // [중요] 여기에 복사해 둔 'JavaScript 키'를 넣으세요!
         window.Kakao.init('c83bfe5982c44918880b96c17961d52e'); 
       }
     };
@@ -356,12 +357,11 @@ export default function FutsalCloudApp() {
     if (!guestForm.name) return;
     setLoading(true);
     
-    // stars_type 필드를 재활용해서 초대자 이름을 저장합니다.
     const newGuestPayload = {
       name: guestForm.name,
-      gender: guestForm.gender, // 성별 저장
+      gender: guestForm.gender, 
       group: '게스트',
-      stars_type: guestForm.inviter || null, // 초대자 저장
+      stars_type: guestForm.inviter || null, 
       level: guestForm.level,
       balance: guestForm.level, passing: guestForm.level, dribble: guestForm.level,
       shooting: guestForm.level, touch: guestForm.level, stamina: guestForm.level
@@ -448,7 +448,7 @@ export default function FutsalCloudApp() {
     const level = calculateLevel(editForm);
     const payload = { ...editForm, level };
     if (payload.group === '일반' || payload.group === '게스트') {
-      payload.stars_type = payload.group === '게스트' ? payload.stars_type : null; // 게스트는 초대자 유지
+      payload.stars_type = payload.group === '게스트' ? payload.stars_type : null; 
       payload.payment_date = null; payload.expire_date = null;
     } else {
       payload.payment_date = payload.payment_date || null;
@@ -900,13 +900,6 @@ export default function FutsalCloudApp() {
                   </button>
                 </div>
                 
-                {/* 빠른 게스트 추가 버튼 */}
-                <div className="border-t pt-4 mt-2">
-                  <button onClick={() => setShowGuestModal(true)} className="w-full bg-green-100 text-green-700 border-2 border-green-500 px-4 py-2 rounded-lg font-bold hover:bg-green-200 flex items-center justify-center gap-2 border-dashed">
-                    <UserPlus size={18}/> 오늘 일회성 게스트 빠른 추가 (1초 컷)
-                  </button>
-                </div>
-
               </div>
             </Card>
             
@@ -1007,7 +1000,7 @@ export default function FutsalCloudApp() {
                                 <span className="font-bold flex items-center gap-1 text-sm md:text-base">
                                   <span className={`w-2 h-2 rounded-full shrink-0 ${p.gender==='남성'?'bg-blue-500':'bg-pink-500'}`}></span>
                                   <PlayerName player={p}/>
-                                  <span className="text-xs text-gray-400 font-normal shrink-0">({p.level})</span>
+                                  <span className="text-xs text-gray-400 font-normal shrink-0 ml-1">({p.level})</span>
                                 </span>
                                 
                                 {isAdmin && (
@@ -1064,9 +1057,9 @@ export default function FutsalCloudApp() {
         )}
       </main>
 
-      {/* --- 빠른 게스트 추가 팝업 --- */}
+      {/* --- 게스트 빠른 추가 팝업 (투표 팝업 위에 뜸) --- */}
       {showGuestModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[70] p-4">
           <form onSubmit={handleAddGuest} className="bg-white rounded-lg w-full max-w-sm flex flex-col shadow-2xl overflow-hidden border-2 border-green-500">
             <div className="bg-green-600 text-white p-4 flex justify-between items-center">
               <h2 className="text-lg font-bold flex items-center gap-2"><UserPlus size={20}/> 당일 게스트 1초 추가</h2>
@@ -1092,15 +1085,15 @@ export default function FutsalCloudApp() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-bold mb-1 text-blue-700">누가 초대했나요? (옵션)</label>
+                <label className="block text-sm font-bold mb-1 text-blue-700">누가 초대했나요?</label>
                 <select className="w-full border-2 border-blue-300 p-2 rounded bg-blue-50 text-blue-900 font-bold" 
                   value={guestForm.inviter} onChange={e=>setGuestForm({...guestForm, inviter:e.target.value})}>
-                  <option value="">-- 선택 안함 (무작위 배정) --</option>
+                  <option value="">-- 본인 이름 선택 --</option>
                   {players.filter(p => p.group !== '게스트').sort((a,b)=>a.name.localeCompare(b.name)).map(p => (
                     <option key={p.id} value={p.name}>{p.name}</option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">* 선택하면 시스템이 이 두 명을 <b>무조건 같은 팀</b>으로 배정합니다.</p>
+                <p className="text-xs text-gray-500 mt-1">* 선택하면 이 게스트와 <b>무조건 같은 팀</b>으로 배정됩니다.</p>
               </div>
             </div>
             <div className="p-4 border-t bg-gray-50 flex gap-2">
@@ -1149,7 +1142,11 @@ export default function FutsalCloudApp() {
               </div>
             </div>
             
-            <div className="p-4 border-t bg-gray-50 shrink-0">
+            {/* [변경] 일반 팀원들도 여기서 게스트를 직접 추가할 수 있습니다. */}
+            <div className="p-4 border-t bg-gray-50 shrink-0 space-y-2">
+              <button onClick={() => setShowGuestModal(true)} className="w-full bg-green-50 text-green-700 border-2 border-green-500 py-2.5 rounded-lg font-bold hover:bg-green-100 flex items-center justify-center gap-2 border-dashed">
+                <UserPlus size={18}/> ⚽️ 내 지인(용병) 투표 명단에 추가하기
+              </button>
               <button onClick={() => setShowVoteModal(false)} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold text-lg hover:bg-blue-700 shadow-lg">
                 투표 완료 (창 닫기)
               </button>
