@@ -6,7 +6,7 @@ import {
   Users, Calendar, Activity, Trophy, Plus, 
   Trash2, UserCheck, RefreshCw, Edit2, Save, X, ArrowRightLeft,
   ChevronUp, ChevronDown, Instagram, Youtube, MessageCircle,
-  LogIn, LogOut 
+  LogIn, LogOut, Star, Clock, Bell
 } from 'lucide-react';
 import { 
   Radar, RadarChart, PolarGrid, PolarAngleAxis, 
@@ -14,7 +14,7 @@ import {
 } from 'recharts';
 
 // --------------------------------------------------------
-// [중요] Supabase 키 (기존 것 그대로 유지!)
+// [중요] Supabase 키
 // --------------------------------------------------------
 const supabaseUrl = 'https://vgbrgrlosalarnszmanm.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZnYnJncmxvc2FsYXJuc3ptYW5tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczMzE3NzQsImV4cCI6MjA4MjkwNzc3NH0.py9Bw6NMHFOGAI8daiKrU7IQfTrQh3rsQ6L-qkYIBg0';
@@ -29,6 +29,14 @@ const calculateLevel = (stats) => {
   return Number((sum / 6).toFixed(2));
 };
 
+// 이름 옆에 파란 별을 달아주는 전용 컴포넌트
+const PlayerName = ({ player }) => (
+  <span className="flex items-center gap-1 font-bold">
+    {player.group === '스타즈' && <Star size={14} className="fill-blue-500 text-blue-500" />}
+    {player.name}
+  </span>
+);
+
 const Card = ({ title, children, className = "" }) => (
   <div className={`bg-white rounded-lg border-2 border-blue-600 overflow-hidden shadow-sm flex flex-col ${className}`}>
     <div className="bg-blue-600 px-4 py-2 shrink-0">
@@ -42,7 +50,7 @@ const Card = ({ title, children, className = "" }) => (
 const MoveTeamModal = ({ player, currentTeam, teamCount, onMove, onClose }) => {
   if (!player) return null;
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4">
       <div className="bg-white rounded-lg w-full max-w-sm p-6 shadow-2xl">
         <h3 className="text-lg font-bold mb-4 text-center">{player.name} 팀 이동</h3>
         <div className="grid grid-cols-2 gap-3">
@@ -77,10 +85,10 @@ const PlayerDetailModal = ({ player, records, onClose }) => {
   ];
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4">
       <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
         <div className="bg-blue-700 text-white p-4 flex justify-between items-center">
-          <h2 className="text-xl font-bold">{player.name} 상세 정보</h2>
+          <h2 className="text-xl font-bold"><PlayerName player={player}/> 상세 정보</h2>
           <button onClick={onClose}><X size={24} /></button>
         </div>
         <div className="p-6 overflow-y-auto">
@@ -101,7 +109,7 @@ const PlayerDetailModal = ({ player, records, onClose }) => {
               </div>
               <div className="mt-4 text-center">
                 <p className="text-2xl font-bold text-blue-700">Level {player.level}</p>
-                <p className="text-gray-600">성별: {player.gender}</p>
+                <p className="text-gray-600">성별: {player.gender} | 등급: <span className="font-bold text-blue-600">{player.group||'일반'}</span></p>
                 <p className="font-bold mt-2">통산 {totalGoals}골 / {totalAssists}어시</p>
               </div>
             </div>
@@ -134,33 +142,104 @@ export default function FutsalCloudApp() {
   const [players, setPlayers] = useState([]);
   const [records, setRecords] = useState([]); 
   
+  // --- 일정 및 시간 관리 상태 ---
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [matchTimeStart, setMatchTimeStart] = useState('20:00');
+  const [matchTimeEnd, setMatchTimeEnd] = useState('22:00');
+  const [deadlineDate, setDeadlineDate] = useState(new Date().toISOString().split('T')[0]);
+  const [deadlineTime, setDeadlineTime] = useState('18:00');
+
   const [teamCount, setTeamCount] = useState(2);
-  const [newPlayer, setNewPlayer] = useState({ name: '', gender: '남성', balance: 5, passing: 5, dribble: 5, shooting: 5, touch: 5, stamina: 5 });
+  // group 기본값 추가
+  const [newPlayer, setNewPlayer] = useState({ name: '', gender: '남성', group: '일반', balance: 5, passing: 5, dribble: 5, shooting: 5, touch: 5, stamina: 5 });
 
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [detailPlayer, setDetailPlayer] = useState(null);
   const [movePlayerTarget, setMovePlayerTarget] = useState(null);
+  
   const [tempAttendance, setTempAttendance] = useState([]);
+  const [showVoteModal, setShowVoteModal] = useState(false);
 
   const [filterGender, setFilterGender] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: 'level', direction: 'desc' });
 
-  // --- 로그인 관련 상태 ---
   const [isAdmin, setIsAdmin] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  // --- 소셜 미디어 링크 설정 ---
   const socialLinks = {
     instagram: "https://www.instagram.com", 
     youtube: "", 
     kakao: ""      
   };
 
-  // --- 로그인 상태 확인 (최초 로딩 시) ---
+  // --- 카카오 SDK & 매직 링크 감지 ---
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('vote') === 'true') {
+        const d = params.get('date');
+        if (d) setSelectedDate(d);
+        setShowVoteModal(true);
+      }
+    }
+    const script = document.createElement('script');
+    script.src = 'https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js';
+    script.async = true;
+    document.head.appendChild(script);
+    script.onload = () => {
+      if (!window.Kakao.isInitialized()) {
+        // [중요] 여기에 복사해 둔 'JavaScript 키'를 넣으세요!
+        window.Kakao.init('c83bfe5982c44918880b96c17961d52e'); 
+      }
+    };
+  }, []);
+
+  // 날짜 변환 도우미 함수 (예: "2026-04-15" -> { m: 4, d: 15, day: '수' })
+  const formatKakaoDate = (dateStr) => {
+    if(!dateStr) return { m: '', d: '', day: '' };
+    const dt = new Date(dateStr);
+    const days = ['일','월','화','수','목','금','토'];
+    return { m: dt.getMonth() + 1, d: dt.getDate(), day: days[dt.getDay()] };
+  };
+
+  // --- 1. 투표 알림 보내기 (카카오) ---
+  const shareVoteNotice = () => {
+    if (window.Kakao && window.Kakao.isInitialized()) {
+      const match = formatKakaoDate(selectedDate);
+      const dead = formatKakaoDate(deadlineDate);
+      const magicLinkUrl = `${window.location.origin}${window.location.pathname}?vote=true&date=${selectedDate}`;
+      
+      const text = `[🏁 총총 FC 풋살 모임 투표 안내‼️]\n\n안녕하세요 총총FC 여러분\n${match.m}월 ${match.d}일 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n* 늦참 시 참석투표 후 도착예정시간 댓글 부탁드립니다!\n* 일반회원은 입금완료 시 참석 확정입니다!`;
+
+      window.Kakao.Share.sendDefault({
+        objectType: 'text',
+        text: text,
+        link: { mobileWebUrl: magicLinkUrl, webUrl: magicLinkUrl },
+        buttonTitle: '투표하러 가기 👆',
+      });
+    } else { alert('카카오톡 기능을 불러오는 중입니다. 잠시 후 시도해주세요.'); }
+  };
+
+  // --- 2. 당일 경기 안내(리마인더) 보내기 (카카오) ---
+  const shareMatchReminder = () => {
+    if (window.Kakao && window.Kakao.isInitialized()) {
+      const match = formatKakaoDate(selectedDate);
+      const magicLinkUrl = `${window.location.origin}${window.location.pathname}`;
+      
+      const text = `[🏁 총총 FC 풋살 모임 안내‼️]\n\n안녕하세요 총총FC 여러분\n당일 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n* 경기 10분전 도착하시어 환복해주시면 원활한 경기진행이 됩니다\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층`;
+
+      window.Kakao.Share.sendDefault({
+        objectType: 'text',
+        text: text,
+        link: { mobileWebUrl: magicLinkUrl, webUrl: magicLinkUrl },
+        buttonTitle: '웹사이트 확인하기',
+      });
+    } else { alert('카카오톡 기능을 불러오는 중입니다. 잠시 후 시도해주세요.'); }
+  };
+
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -168,11 +247,9 @@ export default function FutsalCloudApp() {
     };
     checkUser();
 
-    // 로그인 상태가 변할 때 감지
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       setIsAdmin(!!session);
-      // 로그아웃 시, 관리자 탭에 있었다면 쫓아내기
-      if (!session && (activeTab === 'attendance' || activeTab === 'teams')) {
+      if (!session && (activeTab === 'teams' || activeTab === 'attendance')) {
         setActiveTab('players');
       }
     });
@@ -195,47 +272,45 @@ export default function FutsalCloudApp() {
     setTempAttendance(currentDayIds);
   }, [records, selectedDate]);
 
-  // --- 로그인 / 로그아웃 핸들러 ---
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password: loginPassword });
     setLoading(false);
-    if (error) {
-      alert('로그인 실패: 이메일과 비밀번호를 확인해주세요.');
-    } else {
-      alert('운영진으로 로그인되었습니다.');
-      setShowLoginModal(false);
-      setLoginEmail('');
-      setLoginPassword('');
-    }
+    if (error) { alert('로그인 실패: 이메일과 비밀번호를 확인해주세요.'); } 
+    else { alert('운영진으로 로그인되었습니다.'); setShowLoginModal(false); setLoginEmail(''); setLoginPassword(''); }
   };
 
   const handleLogout = async () => {
-    if (window.confirm('로그아웃 하시겠습니까?')) {
-      await supabase.auth.signOut();
-    }
+    if (window.confirm('로그아웃 하시겠습니까?')) await supabase.auth.signOut();
   };
 
-  // --- 기존 핸들러들 ---
+  const handleToggleAttendance = async (pid) => {
+    const isAttending = tempAttendance.includes(pid);
+    if (isAttending) {
+      setTempAttendance(prev => prev.filter(id => id !== pid));
+      await supabase.from('match_records').delete().eq('date', selectedDate).eq('player_id', pid);
+    } else {
+      setTempAttendance(prev => [...prev, pid]);
+      await supabase.from('match_records').insert([{ date: selectedDate, player_id: pid }]);
+    }
+    fetchData();
+  };
+
   const handleAddPlayer = async () => {
     if (!isAdmin) return alert('운영진만 가능합니다.');
     if (!newPlayer.name) return;
     const level = calculateLevel(newPlayer);
     const { error } = await supabase.from('players').insert([{ ...newPlayer, level }]);
     if (!error) {
-      alert('등록되었습니다.');
-      fetchData();
-      setNewPlayer({ name: '', gender: '남성', balance: 5, passing: 5, dribble: 5, shooting: 5, touch: 5, stamina: 5 });
+      alert('등록되었습니다.'); fetchData();
+      setNewPlayer({ name: '', gender: '남성', group: '일반', balance: 5, passing: 5, dribble: 5, shooting: 5, touch: 5, stamina: 5 });
     }
   };
 
   const handleDeletePlayer = async (id) => {
     if (!isAdmin) return alert('운영진만 가능합니다.');
-    if (window.confirm('삭제하시겠습니까?')) {
-      await supabase.from('players').delete().eq('id', id);
-      fetchData();
-    }
+    if (window.confirm('삭제하시겠습니까?')) { await supabase.from('players').delete().eq('id', id); fetchData(); }
   };
 
   const startEditing = (player) => { setEditingId(player.id); setEditForm({ ...player }); };
@@ -244,26 +319,6 @@ export default function FutsalCloudApp() {
     const level = calculateLevel(editForm);
     const { error } = await supabase.from('players').update({ ...editForm, level }).eq('id', editingId);
     if (!error) { alert('수정 완료'); setEditingId(null); fetchData(); }
-  };
-
-  const handleToggleTemp = (pid) => {
-    if (tempAttendance.includes(pid)) setTempAttendance(tempAttendance.filter(id => id !== pid));
-    else setTempAttendance([...tempAttendance, pid]);
-  };
-
-  const handleSaveAttendance = async () => {
-    const currentDayRecords = records.filter(r => r.date === selectedDate);
-    const currentIds = currentDayRecords.map(r => r.player_id);
-    const toAdd = tempAttendance.filter(id => !currentIds.includes(id));
-    const toRemove = currentIds.filter(id => !tempAttendance.includes(id));
-
-    if (toRemove.length > 0) await supabase.from('match_records').delete().eq('date', selectedDate).in('player_id', toRemove);
-    if (toAdd.length > 0) {
-      const newRows = toAdd.map(id => ({ date: selectedDate, player_id: id }));
-      await supabase.from('match_records').insert(newRows);
-    }
-    alert('참여 명단 저장 완료!');
-    fetchData();
   };
 
   const generateTeams = async () => {
@@ -338,7 +393,7 @@ export default function FutsalCloudApp() {
 
   const rankings = useMemo(() => {
     const stats = {};
-    players.forEach(p => { stats[p.id] = { name: p.name, gender: p.gender, goals: 0, assists: 0 }; });
+    players.forEach(p => { stats[p.id] = { name: p.name, group: p.group, gender: p.gender, goals: 0, assists: 0 }; });
     records.forEach(r => {
       if (stats[r.player_id]) { stats[r.player_id].goals += r.goals; stats[r.player_id].assists += r.assists; }
     });
@@ -359,7 +414,11 @@ export default function FutsalCloudApp() {
         </thead>
         <tbody>
           {data.slice(0, 10).map((p, i) => (
-            <tr key={i} className="border-b"><td className="p-2 text-center text-gray-500">{i+1}</td><td className="p-2 text-center">{p.name}</td><td className="p-2 text-center font-bold text-blue-600">{type==='goals'?p.goals:p.assists}</td></tr>
+            <tr key={i} className="border-b">
+              <td className="p-2 text-center text-gray-500">{i+1}</td>
+              <td className="p-2 text-center justify-center flex"><PlayerName player={p}/></td>
+              <td className="p-2 text-center font-bold text-blue-600">{type==='goals'?p.goals:p.assists}</td>
+            </tr>
           ))}
         </tbody>
       </table>
@@ -369,8 +428,17 @@ export default function FutsalCloudApp() {
   return (
     <div className="min-h-screen bg-gray-100 font-sans pb-20 text-gray-800 relative">
       
+      {/* 게스트용 떠다니는 투표 버튼 */}
+      {!isAdmin && (
+        <button onClick={() => setShowVoteModal(true)}
+          className="fixed bottom-8 right-6 bg-blue-600 text-white px-5 py-4 rounded-full shadow-2xl hover:bg-blue-700 hover:scale-105 transition-transform z-40 flex items-center justify-center gap-2 border-2 border-white">
+          <Calendar size={24} />
+          <span className="font-bold text-lg shadow-sm">투표하기</span>
+        </button>
+      )}
+
       {/* 우측 플로팅 소셜 배너 */}
-      <div className="hidden lg:flex flex-col gap-4 fixed right-8 top-1/2 -translate-y-1/2 z-50">
+      <div className="hidden lg:flex flex-col gap-4 fixed right-8 top-1/2 -translate-y-1/2 z-30">
         {socialLinks.instagram && (
           <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" 
              className="bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 p-3 rounded-full text-white shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="인스타그램">
@@ -381,9 +449,9 @@ export default function FutsalCloudApp() {
         {socialLinks.kakao && ( <a href={socialLinks.kakao} target="_blank" rel="noopener noreferrer" className="..."> <MessageCircle size={24} /> </a> )}
       </div>
 
-      <header className="bg-blue-700 text-white p-4 sticky top-0 z-50 shadow-md flex justify-between items-center">
+      <header className="bg-blue-700 text-white p-4 sticky top-0 z-40 shadow-md flex justify-between items-center">
         <div className="flex items-center gap-6">
-          <h1 className="text-xl font-bold flex items-center gap-2"><Activity size={20}/> 풋살 매니저</h1>
+          <h1 className="text-xl font-bold flex items-center gap-2"><Activity size={20}/> 총총 FC 매니저</h1>
           <div className="hidden sm:flex items-center gap-3 border-l border-blue-500 pl-4">
             {socialLinks.instagram && <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="hover:text-pink-300 transition-colors"><Instagram size={18} /></a>}
             {socialLinks.youtube && <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="hover:text-red-300 transition-colors"><Youtube size={18} /></a>}
@@ -406,12 +474,12 @@ export default function FutsalCloudApp() {
         </div>
       </header>
 
-      {/* --- 네비게이션 (권한에 따라 탭 보이기/숨기기) --- */}
-      <nav className="flex bg-white border-b overflow-x-auto sticky top-14 z-40">
+      {/* --- 네비게이션 --- */}
+      <nav className="flex bg-white border-b overflow-x-auto sticky top-14 z-30">
         {[
           { id: 'players', icon: Users, label: '선수' },
-          isAdmin && { id: 'attendance', icon: Calendar, label: '참여' },
-          isAdmin && { id: 'teams', icon: UserCheck, label: '팀/기록' },
+          isAdmin && { id: 'attendance', icon: Calendar, label: '참여(투표) 관리' },
+          isAdmin && { id: 'teams', icon: UserCheck, label: '팀/기록 관리' },
           { id: 'scoreboard', icon: Trophy, label: '랭킹' },
         ].filter(Boolean).map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 flex flex-col items-center p-3 text-xs font-bold ${activeTab===tab.id ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>
@@ -425,12 +493,16 @@ export default function FutsalCloudApp() {
         {/* --- 1. 선수 관리 --- */}
         {activeTab === 'players' && (
           <>
-            {/* 운영진(isAdmin)일 때만 선수 등록 보이기 */}
             {isAdmin && (
               <Card title="선수 등록 (운영진 전용)">
                 <div className="flex gap-2 mb-2">
                   <input placeholder="이름" className="border p-2 rounded w-24" value={newPlayer.name} onChange={e=>setNewPlayer({...newPlayer, name:e.target.value})}/>
                   <select className="border p-2 rounded" value={newPlayer.gender} onChange={e=>setNewPlayer({...newPlayer, gender:e.target.value})}><option>남성</option><option>여성</option></select>
+                  {/* 등급(그룹) 선택 추가 */}
+                  <select className="border p-2 rounded bg-yellow-50 text-yellow-900 font-bold" value={newPlayer.group} onChange={e=>setNewPlayer({...newPlayer, group:e.target.value})}>
+                    <option value="일반">일반 회원</option>
+                    <option value="스타즈">스타즈 ⭐️</option>
+                  </select>
                 </div>
                 <div className="grid grid-cols-6 gap-1 mb-3">
                   {['balance','passing','dribble','shooting','touch','stamina'].map(s=>(
@@ -467,7 +539,6 @@ export default function FutsalCloudApp() {
                       <th className="p-3 cursor-pointer hover:bg-gray-200" onClick={()=>handleSort('gender')}>성별 <SortIcon colKey="gender"/></th>
                       <th className="p-3">능력치</th>
                       <th className="p-3 text-blue-600 cursor-pointer hover:bg-gray-200" onClick={()=>handleSort('level')}>Lv <SortIcon colKey="level"/></th>
-                      {/* 운영진일 때만 관리 헤더 보이기 */}
                       {isAdmin && <th className="p-3">관리</th>}
                     </tr>
                   </thead>
@@ -479,7 +550,10 @@ export default function FutsalCloudApp() {
                         {isEditing ? (
                           <>
                             <td className="p-2"><input className="border w-16 text-center" value={editForm.name} onChange={e=>setEditForm({...editForm, name:e.target.value})}/></td>
-                            <td className="p-2"><select className="border" value={editForm.gender} onChange={e=>setEditForm({...editForm, gender:e.target.value})}><option>남성</option><option>여성</option></select></td>
+                            <td className="p-2">
+                              <select className="border text-xs" value={editForm.gender} onChange={e=>setEditForm({...editForm, gender:e.target.value})}><option>남성</option><option>여성</option></select>
+                              <select className="border text-xs mt-1 bg-yellow-50" value={editForm.group||'일반'} onChange={e=>setEditForm({...editForm, group:e.target.value})}><option value="일반">일반</option><option value="스타즈">스타즈</option></select>
+                            </td>
                             <td className="p-2"><div className="flex gap-1 justify-center">{['balance','passing','dribble','shooting','touch','stamina'].map(s => <input key={s} type="number" min="0" max="10" className="border w-8 text-center" value={editForm[s]} onChange={e=>setEditForm({...editForm, [s]:Number(e.target.value)})}/>)}</div></td>
                             <td className="p-2 font-bold text-blue-600">-</td>
                             {isAdmin && (
@@ -491,11 +565,11 @@ export default function FutsalCloudApp() {
                           </>
                         ) : (
                           <>
-                            <td className="p-3 font-medium">{p.name}</td>
+                            {/* 스타즈 별 아이콘 적용 */}
+                            <td className="p-3 flex justify-center"><PlayerName player={p}/></td>
                             <td className="p-3"><span className={`px-2 py-1 rounded text-xs ${p.gender==='남성'?'bg-blue-100 text-blue-800':'bg-pink-100 text-pink-800'}`}>{p.gender}</span></td>
                             <td className="p-3 text-gray-500 text-xs">{p.balance}/{p.passing}/{p.dribble}/{p.shooting}/{p.touch}/{p.stamina}</td>
                             <td className="p-3 font-bold text-blue-600">{p.level}</td>
-                            {/* 운영진일 때만 관리 버튼 보이기 */}
                             {isAdmin && (
                               <td className="p-3 flex justify-center gap-2">
                                 <button onClick={(e)=>{ e.stopPropagation(); startEditing(p); }} className="text-blue-500"><Edit2 size={16}/></button>
@@ -516,17 +590,45 @@ export default function FutsalCloudApp() {
         {/* --- 2. 참여 관리 (운영진 전용) --- */}
         {isAdmin && activeTab === 'attendance' && (
           <>
-            <Card title="참여 및 저장">
-              <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <span className="font-bold">날짜:</span>
-                    <input type="date" className="border p-2 rounded font-bold bg-gray-50" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)}/>
+            <Card title="이번 주 투표/경기 관리">
+              <div className="flex flex-col gap-4">
+                
+                {/* 시간 및 마감 설정 */}
+                <div className="bg-gray-50 p-4 rounded border space-y-3">
+                  <div className="flex flex-col md:flex-row items-center gap-4">
+                      <div className="flex items-center gap-2 w-full md:w-1/2">
+                          <span className="font-bold text-blue-800 w-20">경기 날짜:</span>
+                          <input type="date" className="border border-blue-300 p-2 rounded font-bold flex-1" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)}/>
+                      </div>
+                      <div className="flex items-center gap-2 w-full md:w-1/2">
+                          <span className="font-bold text-blue-800 w-20">경기 시간:</span>
+                          <input type="time" className="border border-blue-300 p-2 rounded w-24" value={matchTimeStart} onChange={e=>setMatchTimeStart(e.target.value)}/>
+                          <span>~</span>
+                          <input type="time" className="border border-blue-300 p-2 rounded w-24" value={matchTimeEnd} onChange={e=>setMatchTimeEnd(e.target.value)}/>
+                      </div>
+                  </div>
+                  <div className="flex flex-col md:flex-row items-center gap-4 border-t pt-3">
+                      <div className="flex items-center gap-2 w-full md:w-1/2">
+                          <span className="font-bold text-red-600 w-20">마감 날짜:</span>
+                          <input type="date" className="border border-red-300 p-2 rounded flex-1" value={deadlineDate} onChange={e=>setDeadlineDate(e.target.value)}/>
+                      </div>
+                      <div className="flex items-center gap-2 w-full md:w-1/2">
+                          <span className="font-bold text-red-600 w-20">마감 시간:</span>
+                          <input type="time" className="border border-red-300 p-2 rounded w-24" value={deadlineTime} onChange={e=>setDeadlineTime(e.target.value)}/>
+                      </div>
+                  </div>
                 </div>
-                <button onClick={handleSaveAttendance} className="w-full md:w-auto bg-green-600 text-white px-6 py-2 rounded font-bold hover:bg-green-700 flex items-center justify-center gap-2 shadow-lg">
-                    <Save size={18}/> 참여 명단 저장 (DB반영)
-                </button>
+                
+                {/* 카카오톡 버튼 2개 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <button onClick={shareVoteNotice} className="bg-[#FEE500] text-[#191919] px-4 py-3 rounded-lg font-bold hover:bg-[#e5cf00] flex items-center justify-center gap-2 shadow border border-yellow-400">
+                    <MessageCircle size={20} className="fill-current"/> 1. 투표 열기 (카톡 공유)
+                  </button>
+                  <button onClick={shareMatchReminder} className="bg-blue-600 text-white px-4 py-3 rounded-lg font-bold hover:bg-blue-700 flex items-center justify-center gap-2 shadow">
+                    <Bell size={20} /> 2. 당일 경기 안내 (카톡 공유)
+                  </button>
+                </div>
               </div>
-              <p className="mt-2 text-xs text-gray-500">* [저장] 버튼을 눌러야 팀 생성 탭에서 인원이 보입니다.</p>
             </Card>
             
             <div className="grid grid-cols-2 gap-4">
@@ -536,10 +638,10 @@ export default function FutsalCloudApp() {
                   {players.filter(p=>p.gender===gender).map(p => {
                     const isChecked = tempAttendance.includes(p.id);
                     return (
-                      <div key={p.id} onClick={()=>handleToggleTemp(p.id)} 
-                           className={`p-3 rounded border cursor-pointer flex justify-between items-center transition-all ${isChecked ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'bg-white hover:bg-gray-50'}`}>
-                        <span className="font-bold">{p.name} <span className="text-xs text-gray-400 font-normal">({p.level})</span></span>
-                        <div className={`w-5 h-5 rounded border flex items-center justify-center ${isChecked?'bg-blue-600 border-blue-600':''}`}>
+                      <div key={p.id} onClick={()=>handleToggleAttendance(p.id)} 
+                           className={`p-3 rounded border cursor-pointer flex justify-between items-center transition-all ${isChecked ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500 shadow-sm' : 'bg-white hover:bg-gray-50'}`}>
+                        <PlayerName player={p}/>
+                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isChecked?'bg-blue-600 border-blue-600':'border-gray-300'}`}>
                           {isChecked && <UserCheck size={14} className="text-white"/>}
                         </div>
                       </div>
@@ -567,8 +669,7 @@ export default function FutsalCloudApp() {
                <button onClick={generateTeams} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold shadow hover:bg-blue-700">팀 생성/초기화</button>
             </div>
 
-            <Card title="대기 명단 (팀 배정 전)">
-               <div className="text-xs text-gray-500 mb-2">* '참여 관리'에서 저장된 인원입니다. 팀이 생성되면 팀 번호가 부여됩니다.</div>
+            <Card title="대기 명단 (투표 완료 인원)">
                <div className="flex flex-wrap gap-2">
                   {records.filter(r => r.date === selectedDate).map(r => {
                       const p = players.find(pl => pl.id === r.player_id);
@@ -576,13 +677,13 @@ export default function FutsalCloudApp() {
                       const isAssigned = r.team > 0;
                       return (
                         <div key={r.id} className={`px-3 py-1 rounded border text-sm font-bold flex items-center gap-2 ${isAssigned ? 'bg-gray-100 text-gray-500' : 'bg-blue-50 text-blue-700 border-blue-300'}`}>
-                           <span>{p.name}</span>
+                           <PlayerName player={p}/>
                            <span className="text-xs bg-white px-1 rounded border">Lv.{p.level}</span>
                            {isAssigned && <span className="text-xs text-green-600">→ 팀{r.team}</span>}
                         </div>
                       )
                   })}
-                  {records.filter(r => r.date === selectedDate).length === 0 && <span className="text-gray-400">대기 인원이 없습니다.</span>}
+                  {records.filter(r => r.date === selectedDate).length === 0 && <span className="text-gray-400">투표한 인원이 없습니다.</span>}
                </div>
             </Card>
 
@@ -605,7 +706,7 @@ export default function FutsalCloudApp() {
                               <div className="flex justify-between items-center">
                                 <span className="font-bold flex items-center gap-1">
                                   <span className={`w-2 h-2 rounded-full ${p.gender==='남성'?'bg-blue-500':'bg-pink-500'}`}></span>
-                                  {p.name}
+                                  <PlayerName player={p}/>
                                 </span>
                                 <button onClick={()=>setMovePlayerTarget({ p, teamNo: record.team })} 
                                         className="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded flex items-center gap-1">
@@ -636,7 +737,7 @@ export default function FutsalCloudApp() {
           </>
         )}
 
-        {/* --- 4. 랭킹 (모두 접근 가능) --- */}
+        {/* --- 4. 랭킹 --- */}
         {activeTab === 'scoreboard' && (
           <div className="grid grid-cols-2 gap-4 h-full items-start">
              <div className="flex flex-col gap-4">
@@ -651,11 +752,57 @@ export default function FutsalCloudApp() {
         )}
       </main>
 
-      {/* --- 로그인 모달 창 --- */}
+      {/* --- 게스트용 투표 팝업 --- */}
+      {showVoteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-lg w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="bg-blue-600 text-white p-4 flex justify-between items-center shrink-0">
+              <h2 className="text-xl font-bold flex items-center gap-2"><Calendar size={20}/> {selectedDate} 투표</h2>
+              <button onClick={() => setShowVoteModal(false)}><X size={24} /></button>
+            </div>
+            
+            <div className="p-4 overflow-y-auto space-y-4">
+              <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg text-center shadow-sm">
+                <p className="text-sm text-blue-800 font-medium">본인 이름을 누르면 <b>즉시 투표(자동 저장)</b> 됩니다.</p>
+                <p className="text-xs text-blue-600 mt-1">* 한 번 더 누르면 불참으로 변경됩니다.</p>
+                <p className="text-xs text-blue-600 mt-1">* 늦참이나 뒤풀이 여부는 카톡방에 남겨주세요!</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {['남성','여성'].map(gender => (
+                  <div key={gender} className="space-y-2">
+                    <div className="bg-gray-100 text-center font-bold py-1.5 rounded text-sm text-gray-700 shadow-sm border">{gender}</div>
+                    {players.filter(p=>p.gender===gender).map(p => {
+                      const isChecked = tempAttendance.includes(p.id);
+                      return (
+                        <div key={p.id} onClick={()=>handleToggleAttendance(p.id)}
+                             className={`p-2.5 rounded border cursor-pointer flex justify-between items-center transition-all ${isChecked ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500 shadow-md' : 'bg-white hover:bg-gray-50'}`}>
+                          <PlayerName player={p}/>
+                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isChecked?'bg-blue-600 border-blue-600':'border-gray-300'}`}>
+                            {isChecked && <UserCheck size={12} className="text-white"/>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="p-4 border-t bg-gray-50 shrink-0">
+              <button onClick={() => setShowVoteModal(false)} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold text-lg hover:bg-blue-700 shadow-lg">
+                투표 완료 (창 닫기)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- 운영진 로그인 모달 창 --- */}
       {showLoginModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
           <form onSubmit={handleLogin} className="bg-white rounded-lg w-full max-w-sm p-6 shadow-2xl flex flex-col gap-4">
-            <h2 className="text-xl font-bold text-center border-b pb-2">로그인</h2>
+            <h2 className="text-xl font-bold text-center border-b pb-2">운영진 로그인</h2>
             <p className="text-xs text-gray-500 text-center">Supabase에서 생성한 계정으로 로그인하세요.</p>
             <div>
               <label className="block text-sm font-bold mb-1">이메일</label>
@@ -677,13 +824,6 @@ export default function FutsalCloudApp() {
             </div>
           </form>
         </div>
-      )}
-
-      {/* 팝업들 */}
-      <PlayerDetailModal player={detailPlayer} records={records} onClose={() => setDetailPlayer(null)} />
-      {movePlayerTarget && (
-        <MoveTeamModal player={movePlayerTarget.p} currentTeam={movePlayerTarget.teamNo} teamCount={teamCount} 
-           onMove={handleMoveTeam} onClose={()=>setMovePlayerTarget(null)} />
       )}
     </div>
   );
