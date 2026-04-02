@@ -376,7 +376,8 @@ export default function FutsalCloudApp() {
       fetchData();
     } else {
       setLoading(false);
-      alert('추가 실패');
+      alert('추가 실패 원인: ' + (error ? error.message : '알 수 없는 오류'));
+      console.error("상세 에러 내용:", error);
     }
   };
 
