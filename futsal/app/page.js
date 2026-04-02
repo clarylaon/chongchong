@@ -7,13 +7,13 @@ import {
   Trash2, UserCheck, RefreshCw, Edit2, Save, X, ArrowRightLeft,
   ChevronUp, ChevronDown, Instagram, Youtube, MessageCircle,
   LogIn, LogOut, Star, Clock, Bell, Download, UserPlus,
-  PieChart as PieChartIcon, TrendingUp, Settings
+  PieChart as PieChartIcon, TrendingUp, Settings, Send, Crown
 } from 'lucide-react';
 import { 
   Radar, RadarChart, PolarGrid, PolarAngleAxis, 
   PolarRadiusAxis, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  PieChart, Pie, Cell, LineChart, Line
+  PieChart, Pie, Cell
 } from 'recharts';
 
 // --------------------------------------------------------
@@ -34,11 +34,9 @@ const calculateLevel = (stats) => {
 
 const calculateExpireDate = (type, dateStr) => {
   if (type === '연납형') {
-    // 연납형은 지정한 날짜와 무관하게 무조건 다음 해 2월 28일
     const nextYear = new Date().getFullYear() + 1;
     return `${nextYear}-02-28`;
   } else if (type === '반납형' && dateStr) {
-    // 반납형은 지정한 날짜 기준 +4개월
     const d = new Date(dateStr);
     d.setMonth(d.getMonth() + 4);
     const yyyy = d.getFullYear();
@@ -234,12 +232,15 @@ export default function FutsalCloudApp() {
   const [detailPlayer, setDetailPlayer] = useState(null);
   const [movePlayerTarget, setMovePlayerTarget] = useState(null);
   
-  // 스타즈 가입유형 설정 팝업 상태
   const [starsModalConfig, setStarsModalConfig] = useState({ isOpen: false, target: null, previousGroup: '일반' });
   const [starsModalData, setStarsModalData] = useState({ option: '연납형', startDate: new Date().toISOString().split('T')[0] });
 
   const [tempAttendance, setTempAttendance] = useState([]);
   const [showVoteModal, setShowVoteModal] = useState(false);
+
+  // 카카오톡 템플릿 공유 팝업 관련 상태
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareTemplate, setShareTemplate] = useState('기본형');
 
   const [showGuestModal, setShowGuestModal] = useState(false);
   const [guestForm, setGuestForm] = useState({ name: '', gender: '남성', inviter: '', level: 5 });
@@ -253,7 +254,7 @@ export default function FutsalCloudApp() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  const socialLinks = { instagram: "https://www.instagram.com", youtube: "", kakao: "" };
+  const socialLinks = { instagram: "https://www.instagram.com/yonsei_gsa.fc", youtube: "", kakao: "" };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -282,14 +283,32 @@ export default function FutsalCloudApp() {
     return { m: dt.getMonth() + 1, d: dt.getDate(), day: days[dt.getDay()] };
   };
 
-  const shareVoteNotice = () => {
-    if (window.Kakao && window.Kakao.isInitialized()) {
-      const match = formatKakaoDate(selectedDate);
-      const dead = formatKakaoDate(deadlineDate);
-      const magicLinkUrl = `${window.location.origin}${window.location.pathname}?vote=true&date=${selectedDate}`;
-      const text = `[🏁 총총 FC 풋살 모임 투표 안내‼️]\n\n안녕하세요 총총FC 여러분\n${match.m}월 ${match.d}일 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n* 일반회원은 입금완료 시 참석 확정입니다!`;
+  // 템플릿 별 텍스트 생성 함수
+  const getShareText = (type) => {
+    const match = formatKakaoDate(selectedDate);
+    const dead = formatKakaoDate(deadlineDate);
+    
+    if (type === '게스트용') {
+      return `[🏁 총총 FC 게스트초청데이‼️]\n\n안녕하세요 총총FC 여러분~\n${match.m}월 ${match.d}일 경기는 “게스트초청데이” 입니다\n우리 주변에 축구를 사랑하는 지인들을 초대하여 (축잘알,선출환영) 총총FC를 홍보하고, 함께 뛰고 친목할 수 있는 시간을 가지려 합니다! 타대학/대학원 상관없이 초청가능하니 많은 참여 부탁드립니다\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n* 게스트: 10,000원\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n\n* 일반회원은 입금완료 시 참석 확정입니다!\n* 게스트 비용은 미리 입금해주시면 감사하겠습니다!`;
+    }
+    
+    // 기본형 (default)
+    return `[🏁 총총 FC 풋살 모임 투표 안내‼️]\n\n안녕하세요 총총FC 여러분\n${match.m}월 ${match.d}일 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n* 일반회원은 입금완료 시 참석 확정입니다!`;
+  };
 
-      window.Kakao.Share.sendDefault({ objectType: 'text', text: text, link: { mobileWebUrl: magicLinkUrl, webUrl: magicLinkUrl }, buttonTitle: '투표하러 가기 👆' });
+  // 실제 카카오톡 공유 실행
+  const executeKakaoShare = () => {
+    if (window.Kakao && window.Kakao.isInitialized()) {
+      const magicLinkUrl = `${window.location.origin}${window.location.pathname}?vote=true&date=${selectedDate}`;
+      const text = getShareText(shareTemplate);
+
+      window.Kakao.Share.sendDefault({ 
+        objectType: 'text', 
+        text: text, 
+        link: { mobileWebUrl: magicLinkUrl, webUrl: magicLinkUrl }, 
+        buttonTitle: '투표하러 가기 👆' 
+      });
+      setShowShareModal(false); // 전송 후 모달 닫기
     } else { alert('카카오톡 기능을 불러오는 중입니다. 잠시 후 시도해주세요.'); }
   };
 
@@ -297,7 +316,7 @@ export default function FutsalCloudApp() {
     if (window.Kakao && window.Kakao.isInitialized()) {
       const match = formatKakaoDate(selectedDate);
       const magicLinkUrl = `${window.location.origin}${window.location.pathname}`;
-      const text = `[🏁 총총 FC 풋살 모임 안내‼️]\n\n안녕하세요 총총FC 여러분\n당일 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n* 경기 10분전 도착하시어 환복해주시면 원활한 경기진행이 됩니다\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층`;
+      const text = `[🏁 총총 FC 당일 경기 안내‼️]\n\n안녕하세요 총총FC 여러분\n오늘 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n* 경기 10분전 도착하시어 환복해주시면 원활한 경기진행이 됩니다.\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층`;
 
       window.Kakao.Share.sendDefault({ objectType: 'text', text: text, link: { mobileWebUrl: magicLinkUrl, webUrl: magicLinkUrl }, buttonTitle: '웹사이트 확인하기' });
     } else { alert('카카오톡 기능을 불러오는 중입니다. 잠시 후 시도해주세요.'); }
@@ -399,7 +418,6 @@ export default function FutsalCloudApp() {
     }
   };
 
-  // --- 스타즈 팝업 관리 함수들 ---
   const openStarsModal = (target, prevGroup) => {
     setStarsModalConfig({ isOpen: true, target, previousGroup: prevGroup });
     setStarsModalData({
@@ -409,7 +427,6 @@ export default function FutsalCloudApp() {
   };
 
   const closeStarsModal = () => {
-      // 취소 시 그룹 원상복구 로직
       if (starsModalConfig.target === 'new') {
           if (newPlayer.group === '스타즈' && !newPlayer.expire_date) {
               setNewPlayer({...newPlayer, group: starsModalConfig.previousGroup});
@@ -448,12 +465,11 @@ export default function FutsalCloudApp() {
       setStarsModalConfig({ isOpen: false, target: null, previousGroup: '' });
   };
 
-  // --- 기존 핸들러 업데이트 ---
   const handleNewPlayerChange = (field, value) => {
     if (field === 'group') {
       if (value === '스타즈') {
         openStarsModal('new', newPlayer.group);
-        return; // 상태 변경은 팝업 확인 시 처리
+        return; 
       } else {
         setNewPlayer({ ...newPlayer, group: value, stars_type: null, payment_date: null, expire_date: null });
         return;
@@ -494,7 +510,7 @@ export default function FutsalCloudApp() {
     if (field === 'group') {
       if (value === '스타즈') {
         openStarsModal('edit', editForm.group);
-        return; // 상태 변경은 팝업에서 처리
+        return; 
       } else {
         setEditForm({ ...editForm, group: value, stars_type: null, payment_date: null, expire_date: null });
         return;
@@ -515,7 +531,6 @@ export default function FutsalCloudApp() {
     if (!error) { alert('수정 완료'); setEditingId(null); fetchData(); }
   };
 
-  // --- 통계 및 데이터 처리 ---
   const totalMatchCount = useMemo(() => new Set(records.map(r => r.date)).size, [records]);
 
   const playerStats = useMemo(() => {
@@ -533,7 +548,6 @@ export default function FutsalCloudApp() {
     return stats;
   }, [players, records]);
 
-  // 대시보드 그래프용 데이터
   const attendanceTrendData = useMemo(() => {
     const trend = {};
     records.forEach(r => {
@@ -541,12 +555,13 @@ export default function FutsalCloudApp() {
       trend[r.date]++;
     });
     return Object.keys(trend).sort().slice(-10).map(date => ({ 
-      date: date.slice(5), // MM-DD
+      date: date.slice(5), 
       '참석 인원': trend[date] 
     }));
   }, [records]);
 
   const pieColors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444'];
+  
   const groupPieData = useMemo(() => {
     let stars = 0, regular = 0, guests = 0;
     players.forEach(p => {
@@ -569,6 +584,20 @@ export default function FutsalCloudApp() {
     return [{ name: '남성', value: m }, { name: '여성', value: f }].filter(d => d.value > 0);
   }, [players]);
 
+  // 스타즈 가입 유형 파이 차트 데이터 생성
+  const starsTypePieData = useMemo(() => {
+    let yearly = 0, half = 0;
+    players.forEach(p => {
+      if (p.group === '스타즈') {
+        if (p.stars_type === '연납형') yearly++;
+        else if (p.stars_type === '반납형') half++;
+      }
+    });
+    return [
+      { name: '연납형', value: yearly },
+      { name: '반납형', value: half }
+    ].filter(d => d.value > 0);
+  }, [players]);
 
   const exportToCSV = () => {
     const headers = ['이름', '성별', '등급', '가입유형/초대자', '기준일', '만료일', '남은기간', '총출석(회)', '출석률(%)'];
@@ -730,7 +759,12 @@ export default function FutsalCloudApp() {
           {data.slice(0, 10).map((p, i) => (
             <tr key={i} className="border-b">
               <td className="p-2 text-center text-gray-500">{i+1}</td>
-              <td className="p-2 text-center justify-center flex"><PlayerName player={p}/></td>
+              <td className="p-2 text-center justify-center flex items-center">
+                <PlayerName player={p}/>
+                {i === 0 && <Crown size={16} className="ml-1 text-yellow-500 fill-yellow-400" />}
+                {i === 1 && <Crown size={16} className="ml-1 text-gray-400 fill-gray-300" />}
+                {i === 2 && <Crown size={16} className="ml-1 text-amber-700 fill-amber-600" />}
+              </td>
               <td className="p-2 text-center font-bold text-blue-600">
                 {type==='goals' ? p.goals : type==='assists' ? p.assists : `${p.attendance}회`}
               </td>
@@ -887,7 +921,6 @@ export default function FutsalCloudApp() {
                               <select className="border text-xs bg-yellow-50" value={editForm.group||'일반'} onChange={e=>handleEditChange('group',e.target.value)}>
                                 <option value="일반">일반</option><option value="스타즈">스타즈</option><option value="게스트">게스트</option>
                               </select>
-                              {/* 에딧 중 스타즈인 경우 상세 설정 팝업 버튼 노출 */}
                               {editForm.group === '스타즈' && (
                                 <button onClick={(e) => { e.stopPropagation(); openStarsModal('edit', '스타즈'); }} className="text-[10px] bg-blue-100 text-blue-700 px-1 py-0.5 rounded w-full border border-blue-300 hover:bg-blue-200">
                                   {editForm.stars_type} 설정 ⚙️
@@ -1009,8 +1042,8 @@ export default function FutsalCloudApp() {
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <button onClick={shareVoteNotice} className="bg-[#FEE500] text-[#191919] px-4 py-3 rounded-lg font-bold hover:bg-[#e5cf00] flex items-center justify-center gap-2 shadow border border-yellow-400">
-                    <MessageCircle size={20} className="fill-current"/> 1. 투표 열기 (카톡 공유)
+                  <button onClick={() => setShowShareModal(true)} className="bg-[#FEE500] text-[#191919] px-4 py-3 rounded-lg font-bold hover:bg-[#e5cf00] flex items-center justify-center gap-2 shadow border border-yellow-400">
+                    <MessageCircle size={20} className="fill-current"/> 1. 투표 열기 (템플릿 선택)
                   </button>
                   <button onClick={shareMatchReminder} className="bg-blue-600 text-white px-4 py-3 rounded-lg font-bold hover:bg-blue-700 flex items-center justify-center gap-2 shadow">
                     <Bell size={20} /> 2. 당일 경기 안내 (카톡 공유)
@@ -1176,7 +1209,6 @@ export default function FutsalCloudApp() {
         {activeTab === 'statistics' && (
           <div className="space-y-6">
             
-            {/* 상단 요약 카드 */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white p-5 rounded-lg border-l-4 border-blue-500 shadow flex items-center justify-between">
                  <div>
@@ -1204,7 +1236,6 @@ export default function FutsalCloudApp() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* 최근 출석 트렌드 (막대 그래프) */}
               <Card title={<span className="flex items-center gap-2"><TrendingUp size={18}/> 최근 경기 참석 트렌드 (10경기)</span>}>
                 <div className="h-64 w-full">
                   {attendanceTrendData.length === 0 ? (
@@ -1223,37 +1254,52 @@ export default function FutsalCloudApp() {
                 </div>
               </Card>
 
-              {/* 회원 구성 비율 (도넛 차트 2개) */}
               <Card title={<span className="flex items-center gap-2"><PieChartIcon size={18}/> 회원 구성 비율</span>}>
-                <div className="h-64 w-full flex flex-col sm:flex-row">
-                  
-                  <div className="flex-1 flex flex-col items-center justify-center relative">
-                    <p className="absolute top-2 text-sm font-bold text-gray-500">회원 등급</p>
+                <div className="h-auto md:h-64 w-full flex flex-col md:flex-row gap-4 py-2">
+                  <div className="flex-1 flex flex-col items-center justify-center relative min-h-[160px]">
+                    <p className="absolute top-0 text-sm font-bold text-gray-500">회원 등급</p>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie data={groupPieData} innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value" stroke="none">
+                        <Pie data={groupPieData} innerRadius={35} outerRadius={55} paddingAngle={5} dataKey="value" stroke="none">
                           {groupPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={pieColors[index % pieColors.length]} />)}
                         </Pie>
                         <Tooltip />
-                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '12px', fontWeight: 'bold'}}/>
+                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '11px', fontWeight: 'bold'}}/>
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
 
-                  <div className="flex-1 flex flex-col items-center justify-center relative">
-                    <p className="absolute top-2 text-sm font-bold text-gray-500">성비 (정식회원)</p>
+                  <div className="flex-1 flex flex-col items-center justify-center relative min-h-[160px]">
+                    <p className="absolute top-0 text-sm font-bold text-gray-500">성비 (정식회원)</p>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie data={genderPieData} innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value" stroke="none">
-                          <Cell fill="#3B82F6" /> {/* 남성 파랑 */}
-                          <Cell fill="#EC4899" /> {/* 여성 핑크 */}
+                        <Pie data={genderPieData} innerRadius={35} outerRadius={55} paddingAngle={5} dataKey="value" stroke="none">
+                          <Cell fill="#3B82F6" />
+                          <Cell fill="#EC4899" />
                         </Pie>
                         <Tooltip />
-                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '12px', fontWeight: 'bold'}}/>
+                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '11px', fontWeight: 'bold'}}/>
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
 
+                  <div className="flex-1 flex flex-col items-center justify-center relative min-h-[160px]">
+                    <p className="absolute top-0 text-sm font-bold text-gray-500">스타즈 유형</p>
+                    {starsTypePieData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={starsTypePieData} innerRadius={35} outerRadius={55} paddingAngle={5} dataKey="value" stroke="none">
+                            <Cell fill="#8B5CF6" /> {/* 보라색 */}
+                            <Cell fill="#F59E0B" /> {/* 주황색 */}
+                          </Pie>
+                          <Tooltip />
+                          <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '11px', fontWeight: 'bold'}}/>
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full mt-4 text-xs text-gray-400 font-bold">데이터 없음</div>
+                    )}
+                  </div>
                 </div>
               </Card>
             </div>
@@ -1305,6 +1351,45 @@ export default function FutsalCloudApp() {
             <div className="p-4 bg-gray-50 border-t flex gap-2">
               <button onClick={closeStarsModal} className="flex-1 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-700 font-bold hover:bg-gray-100">취소</button>
               <button onClick={confirmStarsModal} className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg font-bold shadow-md hover:bg-blue-700">설정 적용하기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- 카카오톡 공유 템플릿 선택 모달 --- */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-[#FEE500] text-[#191919] p-4 flex justify-between items-center shrink-0">
+              <h2 className="text-lg font-bold flex items-center gap-2"><MessageCircle size={20} className="fill-current"/> 투표 공유 템플릿 선택</h2>
+              <button onClick={() => setShowShareModal(false)}><X size={24} /></button>
+            </div>
+            
+            <div className="p-5 overflow-y-auto flex-1 space-y-4">
+              <p className="text-sm text-gray-600 font-bold">전송할 메시지 스타일을 골라주세요.</p>
+              
+              <div className="flex gap-2">
+                {['기본형', '게스트용'].map(type => (
+                  <button key={type} onClick={() => setShareTemplate(type)} 
+                    className={`flex-1 py-2 rounded-lg font-bold text-sm transition-all border ${shareTemplate === type ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm ring-1 ring-blue-500' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'}`}>
+                    {type}
+                  </button>
+                ))}
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <span className="text-xs font-bold text-gray-400 mb-2 block">미리보기</span>
+                <pre className="text-sm text-gray-800 whitespace-pre-wrap font-sans leading-relaxed">
+                  {getShareText(shareTemplate)}
+                </pre>
+              </div>
+            </div>
+
+            <div className="p-4 bg-gray-50 border-t flex gap-2 shrink-0">
+              <button onClick={() => setShowShareModal(false)} className="px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-700 font-bold hover:bg-gray-100">닫기</button>
+              <button onClick={executeKakaoShare} className="flex-1 py-2.5 bg-[#FEE500] text-[#191919] rounded-lg font-bold shadow hover:bg-[#e5cf00] flex justify-center items-center gap-2">
+                <Send size={18}/> 카카오톡으로 공유하기
+              </button>
             </div>
           </div>
         </div>
