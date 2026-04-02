@@ -6,15 +6,18 @@ import {
   Users, Calendar, Activity, Trophy, Plus, 
   Trash2, UserCheck, RefreshCw, Edit2, Save, X, ArrowRightLeft,
   ChevronUp, ChevronDown, Instagram, Youtube, MessageCircle,
-  LogIn, LogOut, Star, Clock, Bell, Download, UserPlus
+  LogIn, LogOut, Star, Clock, Bell, Download, UserPlus,
+  PieChart as PieChartIcon, TrendingUp
 } from 'lucide-react';
 import { 
   Radar, RadarChart, PolarGrid, PolarAngleAxis, 
-  PolarRadiusAxis, ResponsiveContainer 
+  PolarRadiusAxis, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
 
 // --------------------------------------------------------
-// [중요] Supabase 키 (반드시 본인의 진짜 키로 바꿔주세요!)
+// [중요] Supabase 키
 // --------------------------------------------------------
 const supabaseUrl = 'https://vgbrgrlosalarnszmanm.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZnYnJncmxvc2FsYXJuc3ptYW5tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczMzE3NzQsImV4cCI6MjA4MjkwNzc3NH0.py9Bw6NMHFOGAI8daiKrU7IQfTrQh3rsQ6L-qkYIBg0';
@@ -61,12 +64,11 @@ const getDday = (expireDateStr) => {
 
 const DdayBadge = ({ dday }) => {
   if (dday === null) return null;
-  if (dday < 0) return <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded border border-red-300 font-bold ml-1">만료됨</span>;
-  if (dday <= 14) return <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded border border-yellow-400 font-bold ml-1">D-{dday}</span>;
+  if (dday < 0) return <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded border border-red-300 font-bold ml-1 shrink-0">만료됨</span>;
+  if (dday <= 14) return <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded border border-yellow-400 font-bold ml-1 shrink-0">D-{dday}</span>;
   return null;
 };
 
-// 이름 옆 파란 별 & 게스트 뱃지 + 초대자 꼬리표
 const PlayerName = ({ player }) => {
   const isStar = player.group === '스타즈';
   const isGuest = player.group === '게스트';
@@ -120,11 +122,14 @@ const MoveTeamModal = ({ player, currentTeam, teamCount, onMove, onClose }) => {
   );
 };
 
-const PlayerDetailModal = ({ player, records, onClose }) => {
+const PlayerDetailModal = ({ player, records, totalMatches, onClose }) => {
   if (!player) return null;
   const history = records.filter(r => r.player_id === player.id).sort((a, b) => new Date(b.date) - new Date(a.date));
   const totalGoals = history.reduce((acc, cur) => acc + cur.goals, 0);
   const totalAssists = history.reduce((acc, cur) => acc + cur.assists, 0);
+  const attendanceCount = history.length;
+  const attendanceRate = totalMatches > 0 ? Math.round((attendanceCount / totalMatches) * 100) : 0;
+  
   const dday = player.group === '스타즈' ? getDday(player.expire_date) : null;
   
   const chartData = [
@@ -175,7 +180,12 @@ const PlayerDetailModal = ({ player, records, onClose }) => {
                      <p><b>초대자:</b> {player.stars_type}</p>
                   </div>
                 )}
-                <p className="font-bold mt-3">통산 {totalGoals}골 / {totalAssists}어시</p>
+                
+                <div className="mt-3 bg-gray-100 p-3 rounded-lg border inline-block text-sm text-left w-full max-w-xs">
+                  <p className="font-bold border-b pb-1 mb-1 text-gray-700">🏆 통합 통계</p>
+                  <p><b>출석:</b> {attendanceCount}회 <span className="text-xs text-gray-500">(출석률 {attendanceRate}%)</span></p>
+                  <p><b>공격:</b> {totalGoals}골 / {totalAssists}어시</p>
+                </div>
               </div>
             </div>
             <div className="flex-1">
@@ -230,7 +240,6 @@ export default function FutsalCloudApp() {
   const [tempAttendance, setTempAttendance] = useState([]);
   const [showVoteModal, setShowVoteModal] = useState(false);
 
-  // --- 게스트 관리용 상태 ---
   const [showGuestModal, setShowGuestModal] = useState(false);
   const [guestForm, setGuestForm] = useState({ name: '', gender: '남성', inviter: '', level: 5 });
   const [showGuestsInList, setShowGuestsInList] = useState(false);
@@ -260,7 +269,6 @@ export default function FutsalCloudApp() {
     document.head.appendChild(script);
     script.onload = () => {
       if (!window.Kakao.isInitialized()) {
-        // [중요] 여기에 복사해 둔 'JavaScript 키'를 넣으세요!
         window.Kakao.init('c83bfe5982c44918880b96c17961d52e'); 
       }
     };
@@ -351,7 +359,6 @@ export default function FutsalCloudApp() {
     fetchData();
   };
 
-  // --- 일회성 게스트 1초 추가 ---
   const handleAddGuest = async (e) => {
     e.preventDefault();
     if (!guestForm.name) return;
@@ -376,12 +383,10 @@ export default function FutsalCloudApp() {
       fetchData();
     } else {
       setLoading(false);
-      alert('추가 실패 원인: ' + (error ? error.message : '알 수 없는 오류'));
-      console.error("상세 에러 내용:", error);
+      alert('추가 실패');
     }
   };
 
-  // --- 게스트 일괄 청소 ---
   const handleClearGuests = async () => {
     if (!window.confirm('저장된 모든 [게스트] 데이터와 기록이 영구 삭제됩니다.\n정말 삭제하시겠습니까?')) return;
     setLoading(true);
@@ -460,26 +465,84 @@ export default function FutsalCloudApp() {
     if (!error) { alert('수정 완료'); setEditingId(null); fetchData(); }
   };
 
+  // --- 통계 및 데이터 처리 ---
+  const totalMatchCount = useMemo(() => new Set(records.map(r => r.date)).size, [records]);
+
+  const playerStats = useMemo(() => {
+    const stats = {};
+    players.forEach(p => { 
+      stats[p.id] = { name: p.name, group: p.group, expire_date: p.expire_date, gender: p.gender, goals: 0, assists: 0, attendance: 0 }; 
+    });
+    records.forEach(r => {
+      if (stats[r.player_id]) { 
+        stats[r.player_id].goals += r.goals; 
+        stats[r.player_id].assists += r.assists; 
+        stats[r.player_id].attendance += 1;
+      }
+    });
+    return stats;
+  }, [players, records]);
+
+  // 대시보드 그래프용 데이터
+  const attendanceTrendData = useMemo(() => {
+    const trend = {};
+    records.forEach(r => {
+      if (!trend[r.date]) trend[r.date] = 0;
+      trend[r.date]++;
+    });
+    return Object.keys(trend).sort().slice(-10).map(date => ({ 
+      date: date.slice(5), // MM-DD
+      '참석 인원': trend[date] 
+    }));
+  }, [records]);
+
+  const pieColors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444'];
+  const groupPieData = useMemo(() => {
+    let stars = 0, regular = 0, guests = 0;
+    players.forEach(p => {
+      if (p.group === '스타즈') stars++;
+      else if (p.group === '게스트') guests++;
+      else regular++;
+    });
+    return [
+      { name: '스타즈', value: stars },
+      { name: '일반 회원', value: regular },
+      { name: '게스트 기록', value: guests }
+    ].filter(d => d.value > 0);
+  }, [players]);
+
+  const genderPieData = useMemo(() => {
+    let m = 0, f = 0;
+    players.filter(p => p.group !== '게스트').forEach(p => {
+      if (p.gender === '남성') m++; else f++;
+    });
+    return [{ name: '남성', value: m }, { name: '여성', value: f }].filter(d => d.value > 0);
+  }, [players]);
+
+
   const exportToCSV = () => {
-    const headers = ['이름', '성별', '등급', '가입유형/초대자', '입금일', '만료일', '남은기간'];
-    const rows = players.map(p => {
+    const headers = ['이름', '성별', '등급', '가입유형/초대자', '입금일', '만료일', '남은기간', '총출석(회)', '출석률(%)'];
+    const rows = players.filter(p => p.group !== '게스트').map(p => {
       const dday = p.group === '스타즈' ? getDday(p.expire_date) : null;
       let ddayStr = '';
       if (dday !== null) ddayStr = dday < 0 ? '만료됨' : `D-${dday}`;
-      return [p.name, p.gender, p.group || '일반', p.stars_type || '-', p.payment_date || '-', p.expire_date || '-', ddayStr].join(',');
+      
+      const att = playerStats[p.id]?.attendance || 0;
+      const rate = totalMatchCount > 0 ? Math.round((att / totalMatchCount) * 100) : 0;
+
+      return [p.name, p.gender, p.group || '일반', p.stars_type || '-', p.payment_date || '-', p.expire_date || '-', ddayStr, att, rate].join(',');
     });
     const csvContent = "\uFEFF" + headers.join(',') + '\n' + rows.join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `총총FC_회원명단_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `총총FC_회원장부_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // --- 패키지(초대자+게스트) 팀 밸런싱 배정 ---
   const generateTeams = async () => {
     const currentDayRecords = records.filter(r => r.date === selectedDate);
     if (!currentDayRecords.length) return alert('참여 인원이 없습니다.');
@@ -591,35 +654,36 @@ export default function FutsalCloudApp() {
     return sortConfig.direction === 'asc' ? <ChevronUp size={14} className="ml-1 inline"/> : <ChevronDown size={14} className="ml-1 inline"/>;
   };
 
-  const rankings = useMemo(() => {
-    const stats = {};
-    players.filter(p => p.group !== '게스트').forEach(p => { 
-      stats[p.id] = { name: p.name, group: p.group, expire_date: p.expire_date, gender: p.gender, goals: 0, assists: 0 }; 
-    });
-    records.forEach(r => {
-      if (stats[r.player_id]) { stats[r.player_id].goals += r.goals; stats[r.player_id].assists += r.assists; }
-    });
-    const list = Object.values(stats);
+  const rankingLists = useMemo(() => {
+    const list = Object.values(playerStats).filter(p => p.group !== '게스트');
     return {
       maleGoals: list.filter(p => p.gender === '남성').sort((a, b) => b.goals - a.goals),
       femaleGoals: list.filter(p => p.gender === '여성').sort((a, b) => b.goals - a.goals),
       maleAssists: list.filter(p => p.gender === '남성').sort((a, b) => b.assists - a.assists),
       femaleAssists: list.filter(p => p.gender === '여성').sort((a, b) => b.assists - a.assists),
+      maleAttendance: list.filter(p => p.gender === '남성').sort((a, b) => b.attendance - a.attendance),
+      femaleAttendance: list.filter(p => p.gender === '여성').sort((a, b) => b.attendance - a.attendance),
     };
-  }, [records, players]);
+  }, [playerStats]);
 
   const RankingTable = ({ title, data, type }) => (
     <Card title={title} className="h-full">
       <table className="w-full text-sm text-left">
         <thead className="bg-blue-50 text-blue-900 font-bold">
-          <tr><th className="p-2 text-center w-12">순위</th><th className="p-2 text-center">이름</th><th className="p-2 text-center w-16">{type === 'goals' ? '골' : '어시'}</th></tr>
+          <tr>
+            <th className="p-2 text-center w-12">순위</th>
+            <th className="p-2 text-center">이름</th>
+            <th className="p-2 text-center w-16">{type === 'goals' ? '골' : type === 'assists' ? '어시' : '출석'}</th>
+          </tr>
         </thead>
         <tbody>
           {data.slice(0, 10).map((p, i) => (
             <tr key={i} className="border-b">
               <td className="p-2 text-center text-gray-500">{i+1}</td>
               <td className="p-2 text-center justify-center flex"><PlayerName player={p}/></td>
-              <td className="p-2 text-center font-bold text-blue-600">{type==='goals'?p.goals:p.assists}</td>
+              <td className="p-2 text-center font-bold text-blue-600">
+                {type==='goals' ? p.goals : type==='assists' ? p.assists : `${p.attendance}회`}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -676,6 +740,7 @@ export default function FutsalCloudApp() {
           isAdmin && { id: 'attendance', icon: Calendar, label: '투표 관리' },
           { id: 'teams', icon: UserCheck, label: '팀/기록' }, 
           { id: 'scoreboard', icon: Trophy, label: '랭킹' },
+          { id: 'statistics', icon: PieChartIcon, label: '통계' }, // 👈 신설된 통계 탭
         ].filter(Boolean).map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 flex flex-col items-center p-3 text-xs font-bold whitespace-nowrap ${activeTab===tab.id ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>
             <tab.icon size={20} className="mb-1"/>{tab.label}
@@ -824,7 +889,7 @@ export default function FutsalCloudApp() {
         {isAdmin && activeTab === 'members' && (
           <Card title="회원 장부 (운영진 전용)">
             <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-              <p className="text-sm text-gray-600 font-medium">전체 회원의 멤버십 상태를 확인하고 엑셀로 다운로드합니다. (게스트 제외)</p>
+              <p className="text-sm text-gray-600 font-medium">전체 회원의 멤버십 상태와 출석을 확인하고 엑셀로 다운로드합니다.</p>
               <button onClick={exportToCSV} className="w-full md:w-auto bg-green-600 text-white px-5 py-2 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-green-700 shadow border-2 border-green-700">
                 <Download size={18} /> 엑셀(CSV) 내보내기
               </button>
@@ -836,8 +901,8 @@ export default function FutsalCloudApp() {
                     <th className="p-3">이름</th>
                     <th className="p-3">등급</th>
                     <th className="p-3">가입유형</th>
-                    <th className="p-3">입금일</th>
                     <th className="p-3 text-red-600">만료일</th>
+                    <th className="p-3 text-blue-700">총 출석(회)</th>
                     <th className="p-3">상태</th>
                   </tr>
                 </thead>
@@ -845,13 +910,15 @@ export default function FutsalCloudApp() {
                   {players.filter(p => p.group !== '게스트').map(p => {
                     const isStar = p.group === '스타즈';
                     const dday = isStar ? getDday(p.expire_date) : null;
+                    const att = playerStats[p.id]?.attendance || 0;
+                    
                     return (
                       <tr key={p.id} className="border-b hover:bg-gray-50">
                         <td className="p-3 font-medium"><PlayerName player={p}/></td>
                         <td className="p-3"><span className={`px-2 py-1 rounded text-xs font-bold ${isStar ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'}`}>{p.group || '일반'}</span></td>
                         <td className="p-3 text-gray-600">{p.stars_type || '-'}</td>
-                        <td className="p-3 text-gray-600">{p.payment_date || '-'}</td>
                         <td className="p-3 font-bold text-red-600">{p.expire_date || '-'}</td>
+                        <td className="p-3 font-bold text-blue-700 bg-blue-50/50">{att}회</td>
                         <td className="p-3"><DdayBadge dday={dday}/></td>
                       </tr>
                     )
@@ -900,7 +967,6 @@ export default function FutsalCloudApp() {
                     <Bell size={20} /> 2. 당일 경기 안내 (카톡 공유)
                   </button>
                 </div>
-                
               </div>
             </Card>
             
@@ -930,14 +996,12 @@ export default function FutsalCloudApp() {
         {/* --- 4. 팀/기록 관리 (모두 볼 수 있음) --- */}
         {activeTab === 'teams' && (
           <>
-            {/* 상단 컨트롤 바 */}
             <div className="bg-white p-4 rounded shadow border-l-4 border-blue-600 flex flex-col md:flex-row justify-between items-center gap-4">
                <div className="flex items-center gap-2">
                  <span className="font-bold text-sm">경기 날짜:</span>
                  <input type="date" className="border p-2 rounded font-bold bg-gray-50" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)}/>
                </div>
                
-               {/* 운영진만 조작 가능 */}
                {isAdmin && (
                  <div className="flex items-center gap-3">
                    <div className="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded">
@@ -951,7 +1015,6 @@ export default function FutsalCloudApp() {
                )}
             </div>
 
-            {/* 대기 명단 (운영진에게만 보임) */}
             {isAdmin && (
               <Card title="대기 명단 (투표 완료 인원)">
                  <div className="flex flex-wrap gap-2">
@@ -972,7 +1035,6 @@ export default function FutsalCloudApp() {
               </Card>
             )}
 
-            {/* 구성된 팀 목록 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {Array.from({length: teamCount}).map((_, i) => {
                 const teamNo = i + 1;
@@ -1045,22 +1107,114 @@ export default function FutsalCloudApp() {
 
         {/* --- 5. 랭킹 --- */}
         {activeTab === 'scoreboard' && (
-          <div className="grid grid-cols-2 gap-4 h-full items-start">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full items-start">
              <div className="flex flex-col gap-4">
-               <RankingTable title="득점 랭킹 (남성)" data={rankings.maleGoals} type="goals"/>
-               <RankingTable title="득점 랭킹 (여성)" data={rankings.femaleGoals} type="goals"/>
+               <RankingTable title="득점 랭킹 (남성)" data={rankingLists.maleGoals} type="goals"/>
+               <RankingTable title="득점 랭킹 (여성)" data={rankingLists.femaleGoals} type="goals"/>
              </div>
              <div className="flex flex-col gap-4">
-               <RankingTable title="도움 랭킹 (남성)" data={rankings.maleAssists} type="assists"/>
-               <RankingTable title="도움 랭킹 (여성)" data={rankings.femaleAssists} type="assists"/>
+               <RankingTable title="도움 랭킹 (남성)" data={rankingLists.maleAssists} type="assists"/>
+               <RankingTable title="도움 랭킹 (여성)" data={rankingLists.femaleAssists} type="assists"/>
              </div>
+             <div className="flex flex-col gap-4">
+               <RankingTable title="출석 랭킹 (남성)" data={rankingLists.maleAttendance} type="attendance"/>
+               <RankingTable title="출석 랭킹 (여성)" data={rankingLists.femaleAttendance} type="attendance"/>
+             </div>
+          </div>
+        )}
+
+        {/* --- 6. [신설] 통계 탭 --- */}
+        {activeTab === 'statistics' && (
+          <div className="space-y-6">
+            
+            {/* 상단 요약 카드 */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white p-5 rounded-lg border-l-4 border-blue-500 shadow flex items-center justify-between">
+                 <div>
+                   <p className="text-gray-500 text-sm font-bold">진행된 총 경기수</p>
+                   <p className="text-2xl font-black text-blue-900 mt-1">{totalMatchCount}회</p>
+                 </div>
+                 <div className="bg-blue-100 p-3 rounded-full text-blue-600"><Calendar size={24}/></div>
+              </div>
+              <div className="bg-white p-5 rounded-lg border-l-4 border-green-500 shadow flex items-center justify-between">
+                 <div>
+                   <p className="text-gray-500 text-sm font-bold">정식 회원 수 (게스트 제외)</p>
+                   <p className="text-2xl font-black text-green-900 mt-1">{players.filter(p=>p.group!=='게스트').length}명</p>
+                 </div>
+                 <div className="bg-green-100 p-3 rounded-full text-green-600"><Users size={24}/></div>
+              </div>
+              <div className="bg-white p-5 rounded-lg border-l-4 border-yellow-500 shadow flex items-center justify-between">
+                 <div>
+                   <p className="text-gray-500 text-sm font-bold">터진 총 골수</p>
+                   <p className="text-2xl font-black text-yellow-900 mt-1">
+                     {records.reduce((acc, cur) => acc + cur.goals, 0)}골
+                   </p>
+                 </div>
+                 <div className="bg-yellow-100 p-3 rounded-full text-yellow-600"><Activity size={24}/></div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* 최근 출석 트렌드 (막대 그래프) */}
+              <Card title={<span className="flex items-center gap-2"><TrendingUp size={18}/> 최근 경기 참석 트렌드 (10경기)</span>}>
+                <div className="h-64 w-full">
+                  {attendanceTrendData.length === 0 ? (
+                    <div className="h-full flex items-center justify-center text-gray-400 font-bold">데이터가 없습니다.</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={attendanceTrendData} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="date" tick={{fontSize: 12}} />
+                        <YAxis tick={{fontSize: 12}} allowDecimals={false} />
+                        <Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                        <Bar dataKey="참석 인원" fill="#3B82F6" radius={[4, 4, 0, 0]} barSize={30} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              </Card>
+
+              {/* 회원 구성 비율 (도넛 차트 2개) */}
+              <Card title={<span className="flex items-center gap-2"><PieChartIcon size={18}/> 회원 구성 비율</span>}>
+                <div className="h-64 w-full flex flex-col sm:flex-row">
+                  
+                  <div className="flex-1 flex flex-col items-center justify-center relative">
+                    <p className="absolute top-2 text-sm font-bold text-gray-500">회원 등급</p>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={groupPieData} innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value" stroke="none">
+                          {groupPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={pieColors[index % pieColors.length]} />)}
+                        </Pie>
+                        <Tooltip />
+                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '12px', fontWeight: 'bold'}}/>
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="flex-1 flex flex-col items-center justify-center relative">
+                    <p className="absolute top-2 text-sm font-bold text-gray-500">성비 (정식회원)</p>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={genderPieData} innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value" stroke="none">
+                          <Cell fill="#3B82F6" /> {/* 남성 파랑 */}
+                          <Cell fill="#EC4899" /> {/* 여성 핑크 */}
+                        </Pie>
+                        <Tooltip />
+                        <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '12px', fontWeight: 'bold'}}/>
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                </div>
+              </Card>
+            </div>
           </div>
         )}
       </main>
 
-      {/* --- 게스트 빠른 추가 팝업 (투표 팝업 위에 뜸) --- */}
+      {/* --- 게스트 빠른 추가 팝업 --- */}
       {showGuestModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[70] p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[80] p-4">
           <form onSubmit={handleAddGuest} className="bg-white rounded-lg w-full max-w-sm flex flex-col shadow-2xl overflow-hidden border-2 border-green-500">
             <div className="bg-green-600 text-white p-4 flex justify-between items-center">
               <h2 className="text-lg font-bold flex items-center gap-2"><UserPlus size={20}/> 당일 게스트 1초 추가</h2>
@@ -1143,10 +1297,9 @@ export default function FutsalCloudApp() {
               </div>
             </div>
             
-            {/* [변경] 일반 팀원들도 여기서 게스트를 직접 추가할 수 있습니다. */}
             <div className="p-4 border-t bg-gray-50 shrink-0 space-y-2">
               <button onClick={() => setShowGuestModal(true)} className="w-full bg-green-50 text-green-700 border-2 border-green-500 py-2.5 rounded-lg font-bold hover:bg-green-100 flex items-center justify-center gap-2 border-dashed">
-                <UserPlus size={18}/> ⚽️ 내 지인(용병) 투표 명단에 추가하기
+                <UserPlus size={18}/> ⚽️ 내 지인(게스트) 투표 명단에 추가하기
               </button>
               <button onClick={() => setShowVoteModal(false)} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold text-lg hover:bg-blue-700 shadow-lg">
                 투표 완료 (창 닫기)
@@ -1158,7 +1311,7 @@ export default function FutsalCloudApp() {
 
       {/* --- 운영진 로그인 모달 창 --- */}
       {showLoginModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[90] p-4">
           <form onSubmit={handleLogin} className="bg-white rounded-lg w-full max-w-sm p-6 shadow-2xl flex flex-col gap-4">
             <h2 className="text-xl font-bold text-center border-b pb-2">운영진 로그인</h2>
             <p className="text-xs text-gray-500 text-center">Supabase에서 생성한 계정으로 로그인하세요.</p>
