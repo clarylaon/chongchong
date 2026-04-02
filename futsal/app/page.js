@@ -289,7 +289,7 @@ export default function FutsalCloudApp() {
     const dead = formatKakaoDate(deadlineDate);
     
     if (type === '게스트용') {
-      return `[🏁 총총 FC 게스트초청데이‼️]\n\n안녕하세요 총총FC 여러분~\n${match.m}월 ${match.d}일 경기는 “게스트초청데이” 입니다\n우리 주변에 축구를 사랑하는 지인들을 초대하여 (축잘알,선출환영) 총총FC를 홍보하고, 함께 뛰고 친목할 수 있는 시간을 가지려 합니다! 타대학/대학원 상관없이 초청가능하니 많은 참여 부탁드립니다\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n* 게스트: 10,000원\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n\n* 일반회원은 입금완료 시 참석 확정입니다!\n* 게스트 비용은 미리 입금해주시면 감사하겠습니다!`;
+      return `[🏁 총총 FC 게스트초청데이‼️]\n\n안녕하세요 총총FC 여러분~\n${match.m}월 ${match.d}일 경기는 “게스트초청데이” 입니다\n우리 주변에 축구를 사랑하는 지인들을 초대하여 (축잘알,선출환영) 총총FC를 홍보하고, 함께 뛰고 친목할 수 있는 시간을 가지려 합니다! 타대학/대학원 상관없이 초청가능하니 많은 참여 부탁드립니다\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n* 경기 10분전 도착하시어 환복해주시면 원활한 경기진행이 됩니다.\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n* 게스트: 10,000원\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n\n* 일반회원은 입금완료 시 참석 확정입니다!\n* 게스트 비용은 미리 입금해주시면 감사하겠습니다!`;
     }
     
     // 기본형 (default)
@@ -1099,21 +1099,74 @@ export default function FutsalCloudApp() {
 
             {isAdmin && (
               <Card title="대기 명단 (투표 완료 인원)">
-                 <div className="flex flex-wrap gap-2">
-                    {records.filter(r => r.date === selectedDate).map(r => {
-                        const p = players.find(pl => pl.id === r.player_id);
-                        if (!p) return null;
-                        const isAssigned = r.team > 0;
-                        return (
-                          <div key={r.id} className={`px-3 py-1 rounded border text-sm font-bold flex items-center gap-2 ${isAssigned ? 'bg-gray-100 text-gray-500' : 'bg-blue-50 text-blue-700 border-blue-300'}`}>
-                             <PlayerName player={p}/>
-                             <span className="text-xs bg-white px-1 rounded border ml-1">Lv.{p.level}</span>
-                             {isAssigned && <span className="text-xs text-green-600 ml-1">→ 팀{r.team}</span>}
+                {(() => {
+                  const currentDayRecords = records.filter(r => r.date === selectedDate);
+                  const attendedPlayers = currentDayRecords.map(r => ({
+                    ...players.find(pl => pl.id === r.player_id),
+                    record: r
+                  })).filter(p => p.id); 
+
+                  if (attendedPlayers.length === 0) {
+                    return <span className="text-gray-400 text-sm">투표한 인원이 없습니다.</span>;
+                  }
+
+                  const starsPlayers = attendedPlayers.filter(p => p.group === '스타즈');
+                  const regularPlayers = attendedPlayers.filter(p => p.group === '일반');
+                  const guestPlayers = attendedPlayers.filter(p => p.group === '게스트');
+                  const totalCount = attendedPlayers.length;
+
+                  const renderPlayerBadge = (p) => {
+                    const isAssigned = p.record.team > 0;
+                    return (
+                      <div key={p.id} className={`px-3 py-1 rounded border text-sm font-bold flex items-center gap-2 ${isAssigned ? 'bg-gray-100 text-gray-500' : 'bg-blue-50 text-blue-700 border-blue-300'}`}>
+                         <PlayerName player={p}/>
+                         <span className="text-xs bg-white px-1 rounded border ml-1">Lv.{p.level}</span>
+                         {isAssigned && <span className="text-xs text-green-600 ml-1">→ 팀{p.record.team}</span>}
+                      </div>
+                    );
+                  };
+
+                  return (
+                    <div className="flex flex-col gap-4">
+                      <div className="text-xs text-gray-600 pb-2 border-b font-medium bg-gray-50 p-2 rounded">
+                        스타즈: <span className="font-bold">{starsPlayers.length}명</span> | 
+                        일반 회원: <span className="font-bold">{regularPlayers.length}명</span>
+                        {guestPlayers.length > 0 && <span> | 게스트: <span className="font-bold">{guestPlayers.length}명</span></span>}
+                        <span className="mx-2">/</span>
+                        <span className="font-bold text-blue-700">총합: {totalCount}명</span>
+                      </div>
+
+                      <div className="space-y-4">
+                        {starsPlayers.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-bold text-gray-500 mb-2 flex items-center gap-1"><Star size={12}/> 스타즈</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {starsPlayers.map(renderPlayerBadge)}
+                            </div>
                           </div>
-                        )
-                    })}
-                    {records.filter(r => r.date === selectedDate).length === 0 && <span className="text-gray-400">투표한 인원이 없습니다.</span>}
-                 </div>
+                        )}
+                        
+                        {regularPlayers.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-bold text-gray-500 mb-2 flex items-center gap-1"><Users size={12}/> 일반 회원</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {regularPlayers.map(renderPlayerBadge)}
+                            </div>
+                          </div>
+                        )}
+
+                        {guestPlayers.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-bold text-gray-500 mb-2 flex items-center gap-1"><UserPlus size={12}/> 게스트</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {guestPlayers.map(renderPlayerBadge)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </Card>
             )}
 
