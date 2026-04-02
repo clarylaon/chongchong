@@ -7,7 +7,7 @@ import {
   Trash2, UserCheck, RefreshCw, Edit2, Save, X, ArrowRightLeft,
   ChevronUp, ChevronDown, Instagram, Youtube, MessageCircle,
   LogIn, LogOut, Star, Clock, Bell, Download, UserPlus,
-  PieChart as PieChartIcon, TrendingUp
+  PieChart as PieChartIcon, TrendingUp, Settings
 } from 'lucide-react';
 import { 
   Radar, RadarChart, PolarGrid, PolarAngleAxis, 
@@ -33,21 +33,18 @@ const calculateLevel = (stats) => {
 };
 
 const calculateExpireDate = (type, dateStr) => {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  if (type === '반납형') {
+  if (type === '연납형') {
+    // 연납형은 지정한 날짜와 무관하게 무조건 다음 해 2월 28일
+    const nextYear = new Date().getFullYear() + 1;
+    return `${nextYear}-02-28`;
+  } else if (type === '반납형' && dateStr) {
+    // 반납형은 지정한 날짜 기준 +4개월
+    const d = new Date(dateStr);
     d.setMonth(d.getMonth() + 4);
-    const offsetDate = new Date(d.getTime() - (d.getTimezoneOffset() * 60000));
-    return offsetDate.toISOString().split('T')[0];
-  } 
-  else if (type === '연납형') {
-    const y = d.getFullYear();
-    const m = d.getMonth() + 1; 
-    if (y === 2026) return '2027-02-28';
-    let expY = m <= 2 ? y : y + 1;
-    const lastDay = new Date(expY, 2, 0);
-    const offsetDate = new Date(lastDay.getTime() - (lastDay.getTimezoneOffset() * 60000));
-    return offsetDate.toISOString().split('T')[0];
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   }
   return null;
 };
@@ -237,6 +234,10 @@ export default function FutsalCloudApp() {
   const [detailPlayer, setDetailPlayer] = useState(null);
   const [movePlayerTarget, setMovePlayerTarget] = useState(null);
   
+  // 스타즈 가입유형 설정 팝업 상태
+  const [starsModalConfig, setStarsModalConfig] = useState({ isOpen: false, target: null, previousGroup: '일반' });
+  const [starsModalData, setStarsModalData] = useState({ option: '연납형', startDate: new Date().toISOString().split('T')[0] });
+
   const [tempAttendance, setTempAttendance] = useState([]);
   const [showVoteModal, setShowVoteModal] = useState(false);
 
@@ -398,19 +399,67 @@ export default function FutsalCloudApp() {
     }
   };
 
+  // --- 스타즈 팝업 관리 함수들 ---
+  const openStarsModal = (target, prevGroup) => {
+    setStarsModalConfig({ isOpen: true, target, previousGroup: prevGroup });
+    setStarsModalData({
+        option: target === 'new' ? (newPlayer.stars_type || '연납형') : (editForm.stars_type || '연납형'),
+        startDate: target === 'new' ? (newPlayer.payment_date || new Date().toISOString().split('T')[0]) : (editForm.payment_date || new Date().toISOString().split('T')[0])
+    });
+  };
+
+  const closeStarsModal = () => {
+      // 취소 시 그룹 원상복구 로직
+      if (starsModalConfig.target === 'new') {
+          if (newPlayer.group === '스타즈' && !newPlayer.expire_date) {
+              setNewPlayer({...newPlayer, group: starsModalConfig.previousGroup});
+          }
+      } else if (starsModalConfig.target === 'edit') {
+          if (editForm.group === '스타즈' && !editForm.expire_date) {
+              setEditForm({...editForm, group: starsModalConfig.previousGroup});
+          }
+      }
+      setStarsModalConfig({ isOpen: false, target: null, previousGroup: '' });
+  };
+
+  const confirmStarsModal = () => {
+      const { option, startDate } = starsModalData;
+      if (option === '반납형' && !startDate) return alert('기준 날짜를 선택해주세요.');
+
+      const expDate = calculateExpireDate(option, startDate || new Date().toISOString().split('T')[0]);
+
+      if (starsModalConfig.target === 'new') {
+          setNewPlayer({
+              ...newPlayer,
+              group: '스타즈',
+              stars_type: option,
+              payment_date: startDate,
+              expire_date: expDate
+          });
+      } else if (starsModalConfig.target === 'edit') {
+          setEditForm({
+              ...editForm,
+              group: '스타즈',
+              stars_type: option,
+              payment_date: startDate,
+              expire_date: expDate
+          });
+      }
+      setStarsModalConfig({ isOpen: false, target: null, previousGroup: '' });
+  };
+
+  // --- 기존 핸들러 업데이트 ---
   const handleNewPlayerChange = (field, value) => {
-    let updated = { ...newPlayer, [field]: value };
-    if (updated.group === '스타즈' && (field === 'payment_date' || field === 'stars_type')) {
-      updated.expire_date = calculateExpireDate(updated.stars_type, updated.payment_date);
+    if (field === 'group') {
+      if (value === '스타즈') {
+        openStarsModal('new', newPlayer.group);
+        return; // 상태 변경은 팝업 확인 시 처리
+      } else {
+        setNewPlayer({ ...newPlayer, group: value, stars_type: null, payment_date: null, expire_date: null });
+        return;
+      }
     }
-    if (field === 'group' && value === '일반') {
-      updated.stars_type = null; updated.payment_date = null; updated.expire_date = null;
-    }
-    if (field === 'group' && value === '스타즈') {
-      updated.stars_type = '연납형'; updated.payment_date = new Date().toISOString().split('T')[0];
-      updated.expire_date = calculateExpireDate('연납형', updated.payment_date);
-    }
-    setNewPlayer(updated);
+    setNewPlayer(prev => ({ ...prev, [field]: value }));
   };
 
   const handleAddPlayer = async () => {
@@ -442,12 +491,16 @@ export default function FutsalCloudApp() {
   const cancelEditing = () => { setEditingId(null); setEditForm({}); };
   
   const handleEditChange = (field, value) => {
-    let updated = { ...editForm, [field]: value };
-    if (updated.group === '스타즈' && (field === 'payment_date' || field === 'stars_type' || field === 'group')) {
-      if(field === 'group' && !updated.stars_type) updated.stars_type = '연납형'; 
-      if(updated.payment_date) updated.expire_date = calculateExpireDate(updated.stars_type, updated.payment_date);
+    if (field === 'group') {
+      if (value === '스타즈') {
+        openStarsModal('edit', editForm.group);
+        return; // 상태 변경은 팝업에서 처리
+      } else {
+        setEditForm({ ...editForm, group: value, stars_type: null, payment_date: null, expire_date: null });
+        return;
+      }
     }
-    setEditForm(updated);
+    setEditForm(prev => ({ ...prev, [field]: value }));
   };
 
   const saveEditing = async () => {
@@ -456,9 +509,6 @@ export default function FutsalCloudApp() {
     if (payload.group === '일반' || payload.group === '게스트') {
       payload.stars_type = payload.group === '게스트' ? payload.stars_type : null; 
       payload.payment_date = null; payload.expire_date = null;
-    } else {
-      payload.payment_date = payload.payment_date || null;
-      payload.expire_date = payload.expire_date || null;
     }
 
     const { error } = await supabase.from('players').update(payload).eq('id', editingId);
@@ -521,7 +571,7 @@ export default function FutsalCloudApp() {
 
 
   const exportToCSV = () => {
-    const headers = ['이름', '성별', '등급', '가입유형/초대자', '입금일', '만료일', '남은기간', '총출석(회)', '출석률(%)'];
+    const headers = ['이름', '성별', '등급', '가입유형/초대자', '기준일', '만료일', '남은기간', '총출석(회)', '출석률(%)'];
     const rows = players.filter(p => p.group !== '게스트').map(p => {
       const dday = p.group === '스타즈' ? getDday(p.expire_date) : null;
       let ddayStr = '';
@@ -740,7 +790,7 @@ export default function FutsalCloudApp() {
           isAdmin && { id: 'attendance', icon: Calendar, label: '투표 관리' },
           { id: 'teams', icon: UserCheck, label: '팀/기록' }, 
           { id: 'scoreboard', icon: Trophy, label: '랭킹' },
-          { id: 'statistics', icon: PieChartIcon, label: '통계' }, // 👈 신설된 통계 탭
+          { id: 'statistics', icon: PieChartIcon, label: '통계' },
         ].filter(Boolean).map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 flex flex-col items-center p-3 text-xs font-bold whitespace-nowrap ${activeTab===tab.id ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>
             <tab.icon size={20} className="mb-1"/>{tab.label}
@@ -765,20 +815,13 @@ export default function FutsalCloudApp() {
                 </div>
                 
                 {newPlayer.group === '스타즈' && (
-                  <div className="flex flex-wrap gap-3 items-center bg-blue-50 p-3 rounded-lg border border-blue-200 mb-3 shadow-inner">
-                    <span className="font-bold text-sm text-blue-800 shrink-0"><Star size={16} className="inline mr-1"/>스타즈 관리:</span>
-                    <select className="border p-1.5 rounded text-sm bg-white" value={newPlayer.stars_type} onChange={e=>handleNewPlayerChange('stars_type', e.target.value)}>
-                      <option value="연납형">연납형 (12만원)</option>
-                      <option value="반납형">반납형 (6만원, 4개월)</option>
-                    </select>
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs font-bold text-gray-600">입금일:</span>
-                      <input type="date" className="border p-1.5 rounded text-sm bg-white w-32" value={newPlayer.payment_date} onChange={e=>handleNewPlayerChange('payment_date', e.target.value)}/>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs font-bold text-gray-600">만료일:</span>
-                      <input type="date" className="border p-1.5 rounded text-sm bg-gray-200 text-red-600 font-bold w-32" value={newPlayer.expire_date || ''} readOnly title="자동 계산됩니다"/>
-                    </div>
+                  <div className="flex items-center gap-3 bg-blue-50 p-3 rounded-lg border border-blue-200 mb-3 shadow-inner">
+                    <span className="font-bold text-sm text-blue-800 shrink-0"><Star size={16} className="inline mr-1"/>스타즈 설정:</span>
+                    <span className="text-sm font-bold bg-white px-2 py-1 rounded border">{newPlayer.stars_type}</span>
+                    <span className="text-xs text-gray-600">만료일: {newPlayer.expire_date || '-'}</span>
+                    <button onClick={() => openStarsModal('new', '스타즈')} className="text-xs bg-blue-600 text-white px-2 py-1 rounded ml-auto flex items-center gap-1">
+                      <Settings size={12}/> 설정 변경
+                    </button>
                   </div>
                 )}
 
@@ -844,6 +887,12 @@ export default function FutsalCloudApp() {
                               <select className="border text-xs bg-yellow-50" value={editForm.group||'일반'} onChange={e=>handleEditChange('group',e.target.value)}>
                                 <option value="일반">일반</option><option value="스타즈">스타즈</option><option value="게스트">게스트</option>
                               </select>
+                              {/* 에딧 중 스타즈인 경우 상세 설정 팝업 버튼 노출 */}
+                              {editForm.group === '스타즈' && (
+                                <button onClick={(e) => { e.stopPropagation(); openStarsModal('edit', '스타즈'); }} className="text-[10px] bg-blue-100 text-blue-700 px-1 py-0.5 rounded w-full border border-blue-300 hover:bg-blue-200">
+                                  {editForm.stars_type} 설정 ⚙️
+                                </button>
+                              )}
                             </td>
                             <td className="p-2"><select className="border text-sm" value={editForm.gender} onChange={e=>handleEditChange('gender',e.target.value)}><option>남성</option><option>여성</option></select></td>
                             <td className="p-2"><div className="flex gap-1 justify-center">{['balance','passing','dribble','shooting','touch','stamina'].map(s => <input key={s} type="number" min="0" max="10" className="border w-8 text-center" value={editForm[s]} onChange={e=>handleEditChange(s,Number(e.target.value))}/>)}</div></td>
@@ -1123,7 +1172,7 @@ export default function FutsalCloudApp() {
           </div>
         )}
 
-        {/* --- 6. [신설] 통계 탭 --- */}
+        {/* --- 6. 통계 탭 --- */}
         {activeTab === 'statistics' && (
           <div className="space-y-6">
             
@@ -1211,6 +1260,55 @@ export default function FutsalCloudApp() {
           </div>
         )}
       </main>
+
+      {/* --- 가입유형 [스타즈] 설정 모달 팝업 --- */}
+      {starsModalConfig.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden border-2 border-blue-500">
+            <div className="bg-blue-600 text-white p-4 flex justify-between items-center">
+              <h2 className="text-lg font-bold flex items-center gap-2"><Star size={20}/> 스타즈 가입유형 설정</h2>
+              <button onClick={closeStarsModal}><X size={24} /></button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div className="flex gap-4 p-1 bg-gray-100 rounded-lg">
+                <label className={`flex-1 text-center py-2 rounded-md cursor-pointer font-bold text-sm transition-colors ${starsModalData.option === '연납형' ? 'bg-white shadow text-blue-700' : 'text-gray-500 hover:bg-gray-200'}`}>
+                  <input type="radio" name="starsOption" value="연납형" className="hidden"
+                    checked={starsModalData.option === '연납형'} 
+                    onChange={(e) => setStarsModalData({...starsModalData, option: e.target.value})} />
+                  연납형 (12만원)
+                </label>
+                <label className={`flex-1 text-center py-2 rounded-md cursor-pointer font-bold text-sm transition-colors ${starsModalData.option === '반납형' ? 'bg-white shadow text-blue-700' : 'text-gray-500 hover:bg-gray-200'}`}>
+                  <input type="radio" name="starsOption" value="반납형" className="hidden"
+                    checked={starsModalData.option === '반납형'} 
+                    onChange={(e) => setStarsModalData({...starsModalData, option: e.target.value})} />
+                  반납형 (6만원)
+                </label>
+              </div>
+
+              {starsModalData.option === '반납형' && (
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                  <label className="block text-sm font-bold mb-2 text-blue-900">기준 날짜 선택</label>
+                  <input type="date" className="w-full border-blue-200 p-2.5 rounded shadow-sm focus:ring-blue-500 focus:border-blue-500" 
+                    value={starsModalData.startDate} onChange={(e) => setStarsModalData({...starsModalData, startDate: e.target.value})} />
+                  <p className="text-xs text-blue-700 mt-2 font-medium">👉 선택한 날짜로부터 <b>정확히 4개월 후</b>로 자동 계산됩니다.</p>
+                </div>
+              )}
+
+              {starsModalData.option === '연납형' && (
+                <div className="bg-blue-50 border border-blue-100 text-blue-800 p-4 rounded-lg text-sm text-center font-bold">
+                  등록하시는 현재 연도를 기준으로<br/><span className="text-lg text-blue-600">내년 2월 28일까지</span><br/>자동 연장됩니다.
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-gray-50 border-t flex gap-2">
+              <button onClick={closeStarsModal} className="flex-1 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-700 font-bold hover:bg-gray-100">취소</button>
+              <button onClick={confirmStarsModal} className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg font-bold shadow-md hover:bg-blue-700">설정 적용하기</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- 게스트 빠른 추가 팝업 --- */}
       {showGuestModal && (
@@ -1335,6 +1433,27 @@ export default function FutsalCloudApp() {
             </div>
           </form>
         </div>
+      )}
+
+      {/* --- 선수 상세정보 팝업 --- */}
+      {detailPlayer && (
+        <PlayerDetailModal
+          player={detailPlayer}
+          records={records}
+          totalMatches={totalMatchCount}
+          onClose={() => setDetailPlayer(null)}
+        />
+      )}
+
+      {/* --- 팀 이동 팝업 --- */}
+      {movePlayerTarget && (
+        <MoveTeamModal
+          player={movePlayerTarget.p}
+          currentTeam={movePlayerTarget.teamNo}
+          teamCount={teamCount}
+          onMove={handleMoveTeam}
+          onClose={() => setMovePlayerTarget(null)}
+        />
       )}
     </div>
   );
