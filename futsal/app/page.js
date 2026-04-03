@@ -7,7 +7,7 @@ import {
   Trash2, UserCheck, RefreshCw, Edit2, Save, X, ArrowRightLeft,
   ChevronUp, ChevronDown, Instagram, Youtube, MessageCircle,
   LogIn, LogOut, Star, Clock, Bell, Download, UserPlus,
-  PieChart as PieChartIcon, TrendingUp, Settings, Send, Crown
+  PieChart as PieChartIcon, TrendingUp, Settings, Send, Crown, Home
 } from 'lucide-react';
 import { 
   Radar, RadarChart, PolarGrid, PolarAngleAxis, 
@@ -57,6 +57,31 @@ const getDday = (expireDateStr) => {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
+// --- 신규 유틸리티 (대시보드용) ---
+const getVoteDeadline = (gameDate) => {
+  const date = new Date(gameDate);
+  const dayOfWeek = date.getDay(); // 0(일) ~ 6(토)
+  const daysToSubtract = dayOfWeek === 0 ? 7 : dayOfWeek;
+  date.setDate(date.getDate() - daysToSubtract);
+  date.setHours(23, 59, 59, 999);
+  return date;
+};
+
+const getRankings = (playersArr, type) => {
+  return [...playersArr].sort((a, b) => {
+    if (b[type] !== a[type]) return b[type] - a[type]; // 1차: 기록
+    return b.attendance - a.attendance; // 2차: 출석 횟수
+  });
+};
+
+const formatDateUI = (dateString, timeStr) => {
+  if (!dateString) return '';
+  const options = { month: 'numeric', day: 'numeric', weekday: 'short' };
+  const d = new Date(dateString).toLocaleDateString('ko-KR', options);
+  return timeStr ? `${d} ${timeStr}` : d;
+};
+// ---------------------------------
+
 const DdayBadge = ({ dday }) => {
   if (dday === null) return null;
   if (dday < 0) return <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded border border-red-300 font-bold ml-1 shrink-0">만료됨</span>;
@@ -93,7 +118,7 @@ const Card = ({ title, children, className = "" }) => (
   </div>
 );
 
-// --- 팝업 컴포넌트들 ---
+// --- 팝업 컴포넌트들 생략 없이 그대로 유지 ---
 const MoveTeamModal = ({ player, currentTeam, teamCount, onMove, onClose }) => {
   if (!player) return null;
   return (
@@ -206,7 +231,8 @@ const PlayerDetailModal = ({ player, records, totalMatches, onClose }) => {
 };
 
 export default function FutsalCloudApp() {
-  const [activeTab, setActiveTab] = useState('players');
+  // 기본 화면을 대시보드로 변경
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(false);
   
   const [players, setPlayers] = useState([]);
@@ -238,7 +264,6 @@ export default function FutsalCloudApp() {
   const [tempAttendance, setTempAttendance] = useState([]);
   const [showVoteModal, setShowVoteModal] = useState(false);
 
-  // 카카오톡 템플릿 공유 팝업 관련 상태
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareTemplate, setShareTemplate] = useState('기본형');
 
@@ -254,7 +279,7 @@ export default function FutsalCloudApp() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  const socialLinks = { instagram: "https://www.instagram.com", youtube: "", kakao: "" }; // 각 링크 주소를 채워주세요
+  const socialLinks = { instagram: "https://www.instagram.com", youtube: "", kakao: "" }; 
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -326,7 +351,7 @@ export default function FutsalCloudApp() {
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       setIsAdmin(!!session);
       if (!session && (activeTab === 'attendance' || activeTab === 'members')) {
-        setActiveTab('players');
+        setActiveTab('dashboard'); // 비로그인 시 대시보드로 튕기게 설정
       }
     });
     return () => authListener.subscription.unsubscribe();
@@ -347,6 +372,58 @@ export default function FutsalCloudApp() {
     const currentDayIds = records.filter(r => r.date === selectedDate).map(r => r.player_id);
     setTempAttendance(currentDayIds);
   }, [records, selectedDate]);
+
+  // --- 대시보드용 파생 데이터 연산 로직 ---
+  const playerStats = useMemo(() => {
+    const stats = {};
+    players.forEach(p => { 
+      stats[p.id] = { id: p.id, name: p.name, group: p.group, expire_date: p.expire_date, gender: p.gender, goals: 0, assists: 0, attendance: 0 }; 
+    });
+    records.forEach(r => {
+      if (stats[r.player_id]) { 
+        stats[r.player_id].goals += r.goals; 
+        stats[r.player_id].assists += r.assists; 
+        stats[r.player_id].attendance += 1;
+      }
+    });
+    return stats;
+  }, [players, records]);
+
+  const allTimePlayersArray = useMemo(() => Object.values(playerStats).filter(p => p.group !== '게스트'), [playerStats]);
+
+  const previousGameMVPs = useMemo(() => {
+    const uniqueDates = [...new Set(records.map(r => r.date))].sort();
+    const today = new Date().toISOString().split('T')[0];
+    const pastDates = uniqueDates.filter(d => d < today); // 오늘 이전 가장 최근 경기 날짜 추출
+    
+    if (pastDates.length === 0) return null;
+    const prevDate = pastDates[pastDates.length - 1];
+    
+    const prevRecords = records.filter(r => r.date === prevDate);
+    const playersWithStats = prevRecords.map(r => {
+      const pStat = playerStats[r.player_id] || { attendance: 0, name: 'Unknown' };
+      return { ...pStat, goals: r.goals || 0, assists: r.assists || 0 };
+    });
+
+    const topScorers = getRankings(playersWithStats, 'goals');
+    const topAssists = getRankings(playersWithStats, 'assists');
+
+    if (!topScorers[0] || !topAssists[0]) return null;
+
+    return {
+      date: prevDate,
+      topScorer: topScorers[0],
+      topAssist: topAssists[0]
+    };
+  }, [records, playerStats]);
+
+  const nextGameDate = useMemo(() => {
+    // 임시로 selectedDate 기준 7일 뒤를 '다음 경기 예정'으로 잡습니다.
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().split('T')[0];
+  }, [selectedDate]);
+  // ----------------------------------------
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -549,21 +626,6 @@ export default function FutsalCloudApp() {
   };
 
   const totalMatchCount = useMemo(() => new Set(records.map(r => r.date)).size, [records]);
-
-  const playerStats = useMemo(() => {
-    const stats = {};
-    players.forEach(p => { 
-      stats[p.id] = { name: p.name, group: p.group, expire_date: p.expire_date, gender: p.gender, goals: 0, assists: 0, attendance: 0 }; 
-    });
-    records.forEach(r => {
-      if (stats[r.player_id]) { 
-        stats[r.player_id].goals += r.goals; 
-        stats[r.player_id].assists += r.assists; 
-        stats[r.player_id].attendance += 1;
-      }
-    });
-    return stats;
-  }, [players, records]);
 
   const attendanceTrendData = useMemo(() => {
     const trend = {};
@@ -815,7 +877,6 @@ export default function FutsalCloudApp() {
           <h1 className="text-base sm:text-xl font-bold flex items-center gap-1 sm:gap-2 whitespace-nowrap">
             <Activity size={20} className="shrink-0"/> 총총 FC
           </h1>
-          {/* 모바일에서도 소셜 아이콘 보이도록 hidden sm:flex 제거 및 gap, pl 조정 */}
           <div className="flex items-center gap-2 sm:gap-3 border-l border-blue-500 pl-2 sm:pl-4">
             {socialLinks.instagram && <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="hover:text-pink-300 transition-colors"><Instagram size={18} /></a>}
             {socialLinks.youtube && <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="hover:text-red-300 transition-colors"><Youtube size={18} /></a>}
@@ -840,6 +901,7 @@ export default function FutsalCloudApp() {
       {/* --- 네비게이션 --- */}
       <nav className="flex bg-white border-b overflow-x-auto sticky top-12 sm:top-[60px] z-30">
         {[
+          { id: 'dashboard', icon: Home, label: '홈' }, // 새로 추가된 대시보드 탭
           { id: 'players', icon: Users, label: '선수 목록' },
           isAdmin && { id: 'members', icon: Download, label: '회원 장부' }, 
           isAdmin && { id: 'attendance', icon: Calendar, label: '투표 관리' },
@@ -855,6 +917,102 @@ export default function FutsalCloudApp() {
 
       <main className="p-4 max-w-4xl mx-auto space-y-6">
         
+        {/* --- 0. 홈 (대시보드) --- */}
+        {activeTab === 'dashboard' && (
+          <div className="space-y-6">
+            
+            {/* 1. 지난 경기 MOM 배너 */}
+            {previousGameMVPs && (
+              <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl shadow-sm">
+                <h3 className="text-sm font-bold text-blue-800 mb-2 flex items-center gap-1">
+                  🎉 {formatDateUI(previousGameMVPs.date)} 경기 최고의 활약
+                </h3>
+                <div className="flex gap-4">
+                  <p className="text-sm">🔥 득점왕: <strong>{previousGameMVPs.topScorer.name}</strong> ({previousGameMVPs.topScorer.goals}골)</p>
+                  <p className="text-sm">👟 도움왕: <strong>{previousGameMVPs.topAssist.name}</strong> ({previousGameMVPs.topAssist.assists}도움)</p>
+                </div>
+              </div>
+            )}
+
+            {/* 2. 다가오는 경기 (현재 관리 중인 경기) */}
+            <div className="p-6 bg-white rounded-2xl shadow-md border-2 border-blue-500 relative overflow-hidden">
+              <div className="absolute top-0 right-0 bg-red-500 text-white px-3 py-1 rounded-bl-lg font-bold text-xs shadow-sm">
+                투표 진행 중
+              </div>
+              <h2 className="text-xl font-extrabold text-gray-800 mb-4">다가오는 경기</h2>
+              
+              <div className="space-y-2 mb-6">
+                <p className="text-xl font-bold flex items-center gap-2">
+                  📅 {formatDateUI(selectedDate, `${matchTimeStart} ~ ${matchTimeEnd}`)}
+                </p>
+                <p className="text-md text-gray-600 flex items-center gap-2">
+                  🏟️ 용산 더베이스 풋살장
+                </p>
+              </div>
+
+              <div className="p-4 bg-gray-50 rounded-xl mb-4 text-center border">
+                <p className="text-lg">🔥 현재 <strong className="text-blue-600 text-3xl mx-1">{tempAttendance.length}</strong>명 투표 완료</p>
+              </div>
+
+              <div className="text-right text-sm text-red-500 font-bold flex justify-end items-center gap-1">
+                ⏰ 마감: {formatDateUI(getVoteDeadline(selectedDate), '23:59')} 까지
+              </div>
+            </div>
+
+            {/* 3. 다음 경기 예정 */}
+            <div className="p-5 bg-gray-200 rounded-2xl shadow-sm opacity-60">
+              <h2 className="text-md font-bold text-gray-500 mb-3 flex items-center gap-1">
+                🔜 다음 경기 예정
+              </h2>
+              <p className="text-sm font-medium text-gray-600">📅 {formatDateUI(nextGameDate)}</p>
+              <p className="text-sm text-gray-600 mt-1">🏟️ 용산 더베이스 풋살장</p>
+            </div>
+
+            {/* 4. 명예의 전당 (누적 랭킹 1~3위) */}
+            <div className="bg-white p-5 rounded-2xl shadow-md border">
+              <h2 className="text-lg font-extrabold mb-4 border-b pb-2 flex items-center gap-2">
+                🏆 명예의 전당 (누적 탑 3)
+              </h2>
+              <div className="grid grid-cols-2 gap-4">
+                
+                {/* 득점왕 */}
+                <div className="pr-2">
+                  <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-1">⚽ 누적 득점 순위</h3>
+                  <ul className="text-sm space-y-2">
+                    {getRankings(allTimePlayersArray, 'goals').slice(0, 3).map((player, index) => (
+                      <li key={player.id} className="flex justify-between items-center bg-gray-50 p-2 rounded">
+                        <span className="flex items-center gap-1 font-bold text-gray-700">
+                          {index === 0 ? <Crown size={16} className="text-yellow-500 fill-yellow-400"/> : index === 1 ? <Crown size={16} className="text-gray-400 fill-gray-300"/> : <Crown size={16} className="text-amber-700 fill-amber-600"/>} 
+                          {player.name}
+                        </span>
+                        <span className="font-extrabold text-blue-600">{player.goals}골</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* 도움왕 */}
+                <div className="pl-2 border-l border-gray-200">
+                  <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-1">👟 누적 도움 순위</h3>
+                  <ul className="text-sm space-y-2">
+                    {getRankings(allTimePlayersArray, 'assists').slice(0, 3).map((player, index) => (
+                      <li key={player.id} className="flex justify-between items-center bg-gray-50 p-2 rounded">
+                        <span className="flex items-center gap-1 font-bold text-gray-700">
+                          {index === 0 ? <Crown size={16} className="text-yellow-500 fill-yellow-400"/> : index === 1 ? <Crown size={16} className="text-gray-400 fill-gray-300"/> : <Crown size={16} className="text-amber-700 fill-amber-600"/>} 
+                          {player.name}
+                        </span>
+                        <span className="font-extrabold text-green-600">{player.assists}개</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                
+              </div>
+            </div>
+
+          </div>
+        )}
+
         {/* --- 1. 선수 관리 --- */}
         {activeTab === 'players' && (
           <>
@@ -1311,7 +1469,7 @@ export default function FutsalCloudApp() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card title={<span className="flex items-center gap-2"><TrendingUp size={18}/> 최근 경기 참석 트렌드 (10경기)</span>}>
-                <div className="h-64 w-full">
+                <div className="h-[200px] md:h-[280px] w-full mt-2">
                   {attendanceTrendData.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-gray-400 font-bold">데이터가 없습니다.</div>
                   ) : (
@@ -1328,10 +1486,10 @@ export default function FutsalCloudApp() {
                 </div>
               </Card>
 
-              {/* 모바일에서도 차트가 접히지 않도록 각 차트 wrapper에 명시적 높이(h-[180px]) 부여 */}
+              {/* 절대 안 사라지도록 고정 높이를 강제 부여 (h-[200px] md:h-[240px]) */}
               <Card title={<span className="flex items-center gap-2"><PieChartIcon size={18}/> 회원 구성 비율</span>}>
                 <div className="w-full flex flex-col md:flex-row gap-6 py-4">
-                  <div className="flex-1 flex flex-col items-center justify-center relative h-[180px] md:h-full w-full">
+                  <div className="flex-1 flex flex-col items-center justify-center relative h-[200px] md:h-[240px] w-full">
                     <p className="absolute top-0 text-sm font-bold text-gray-500 z-10">회원 등급</p>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -1344,7 +1502,7 @@ export default function FutsalCloudApp() {
                     </ResponsiveContainer>
                   </div>
 
-                  <div className="flex-1 flex flex-col items-center justify-center relative h-[180px] md:h-full w-full">
+                  <div className="flex-1 flex flex-col items-center justify-center relative h-[200px] md:h-[240px] w-full">
                     <p className="absolute top-0 text-sm font-bold text-gray-500 z-10">성비 (정식회원)</p>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -1358,7 +1516,7 @@ export default function FutsalCloudApp() {
                     </ResponsiveContainer>
                   </div>
 
-                  <div className="flex-1 flex flex-col items-center justify-center relative h-[180px] md:h-full w-full">
+                  <div className="flex-1 flex flex-col items-center justify-center relative h-[200px] md:h-[240px] w-full">
                     <p className="absolute top-0 text-sm font-bold text-gray-500 z-10">스타즈 유형</p>
                     {starsTypePieData.length > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
