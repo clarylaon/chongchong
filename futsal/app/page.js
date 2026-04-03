@@ -254,7 +254,7 @@ export default function FutsalCloudApp() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  const socialLinks = { instagram: "https://www.instagram.com", youtube: "", kakao: "" };
+  const socialLinks = { instagram: "https://www.instagram.com", youtube: "", kakao: "" }; // 각 링크 주소를 채워주세요
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -361,11 +361,9 @@ export default function FutsalCloudApp() {
     if (window.confirm('로그아웃 하시겠습니까?')) await supabase.auth.signOut();
   };
 
-  // ✅ 개선된 투표 로직 (Race Condition 및 데이터 날아가는 현상 방지)
   const handleToggleAttendance = async (pid) => {
     const isAttending = tempAttendance.includes(pid);
     
-    // 1. 화면(UI)부터 먼저 즉시 변경 (빠른 다중 클릭 시 기존 데이터가 덮어써지는 버그 방지)
     if (isAttending) {
       setTempAttendance(prev => prev.filter(id => id !== pid));
       setRecords(prev => prev.filter(r => !(r.date === selectedDate && r.player_id === pid)));
@@ -374,20 +372,19 @@ export default function FutsalCloudApp() {
       setRecords(prev => [...prev, { date: selectedDate, player_id: pid, team: 0, goals: 0, assists: 0 }]);
     }
 
-    // 2. 백엔드(Supabase)에 조용히 데이터 전송 (에러 발생 시에만 원상복구 및 경고창)
     if (isAttending) {
       const { error } = await supabase.from('match_records').delete().eq('date', selectedDate).eq('player_id', pid);
       if (error) {
         console.error("Delete Error:", error);
         alert('서버 오류로 투표가 취소되지 않았습니다. Supabase 권한(RLS) 설정을 확인해주세요.');
-        fetchData(); // 실패 시 원래 데이터로 복구
+        fetchData();
       }
     } else {
       const { error } = await supabase.from('match_records').insert([{ date: selectedDate, player_id: pid }]);
       if (error) {
         console.error("Insert Error:", error);
         alert('서버 오류로 투표가 저장되지 않았습니다. Supabase 권한(RLS) 설정을 확인해주세요.');
-        fetchData(); // 실패 시 원래 데이터로 복구
+        fetchData();
       }
     }
   };
@@ -780,9 +777,9 @@ export default function FutsalCloudApp() {
               <td className="p-2 text-center text-gray-500">{i+1}</td>
               <td className="p-2 text-center justify-center flex items-center">
                 <PlayerName player={p}/>
-                {i === 0 && <Crown size={16} className="ml-1 text-yellow-500 fill-yellow-400" />}
-                {i === 1 && <Crown size={16} className="ml-1 text-gray-400 fill-gray-300" />}
-                {i === 2 && <Crown size={16} className="ml-1 text-amber-700 fill-amber-600" />}
+                {i === 0 && <Crown size={16} className="ml-1 text-yellow-500 fill-yellow-400 shrink-0" />}
+                {i === 1 && <Crown size={16} className="ml-1 text-gray-400 fill-gray-300 shrink-0" />}
+                {i === 2 && <Crown size={16} className="ml-1 text-amber-700 fill-amber-600 shrink-0" />}
               </td>
               <td className="p-2 text-center font-bold text-blue-600">
                 {type==='goals' ? p.goals : type==='assists' ? p.assists : `${p.attendance}회`}
@@ -805,38 +802,43 @@ export default function FutsalCloudApp() {
         </button>
       )}
 
+      {/* PC 버전 오른쪽 공백 플로팅 배너 */}
       <div className="hidden lg:flex flex-col gap-4 fixed right-8 top-1/2 -translate-y-1/2 z-30">
         {socialLinks.instagram && ( <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 p-3 rounded-full text-white shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="인스타그램"><Instagram size={24} /></a>)}
-        {socialLinks.youtube && ( <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="..."> <Youtube size={24} /> </a> )}
-        {socialLinks.kakao && ( <a href={socialLinks.kakao} target="_blank" rel="noopener noreferrer" className="..."> <MessageCircle size={24} /> </a> )}
+        {socialLinks.youtube && ( <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="bg-red-600 p-3 rounded-full text-white shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="유튜브"> <Youtube size={24} /> </a> )}
+        {socialLinks.kakao && ( <a href={socialLinks.kakao} target="_blank" rel="noopener noreferrer" className="bg-yellow-400 p-3 rounded-full text-black shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="카카오톡"> <MessageCircle size={24} /> </a> )}
       </div>
 
-      <header className="bg-blue-700 text-white p-4 sticky top-0 z-40 shadow-md flex justify-between items-center">
-        <div className="flex items-center gap-6">
-          <h1 className="text-xl font-bold flex items-center gap-2"><Activity size={20}/> 총총 FC 매니저</h1>
-          <div className="hidden sm:flex items-center gap-3 border-l border-blue-500 pl-4">
+      {/* --- 모바일 대응 개선된 Header --- */}
+      <header className="bg-blue-700 text-white p-3 sm:p-4 sticky top-0 z-40 shadow-md flex justify-between items-center">
+        <div className="flex items-center gap-2 sm:gap-6">
+          <h1 className="text-base sm:text-xl font-bold flex items-center gap-1 sm:gap-2 whitespace-nowrap">
+            <Activity size={20} className="shrink-0"/> 총총 FC
+          </h1>
+          {/* 모바일에서도 소셜 아이콘 보이도록 hidden sm:flex 제거 및 gap, pl 조정 */}
+          <div className="flex items-center gap-2 sm:gap-3 border-l border-blue-500 pl-2 sm:pl-4">
             {socialLinks.instagram && <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="hover:text-pink-300 transition-colors"><Instagram size={18} /></a>}
             {socialLinks.youtube && <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="hover:text-red-300 transition-colors"><Youtube size={18} /></a>}
             {socialLinks.kakao && <a href={socialLinks.kakao} target="_blank" rel="noopener noreferrer" className="hover:text-yellow-300 transition-colors"><MessageCircle size={18} /></a>}
           </div>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {isAdmin ? (
-            <button onClick={handleLogout} className="flex items-center gap-1 bg-red-500 px-3 py-1.5 rounded text-sm font-bold hover:bg-red-600 transition-colors">
-              <LogOut size={16}/> 운영진 로그아웃
+            <button onClick={handleLogout} className="flex items-center gap-1 bg-red-500 px-2 sm:px-3 py-1.5 rounded text-xs sm:text-sm font-bold hover:bg-red-600 transition-colors whitespace-nowrap">
+              <LogOut size={16}/> <span className="hidden sm:inline">운영진 </span>로그아웃
             </button>
           ) : (
-            <button onClick={() => setShowLoginModal(true)} className="flex items-center gap-1 bg-blue-800 px-3 py-1.5 rounded text-sm font-bold hover:bg-blue-900 transition-colors border border-blue-500">
-              <LogIn size={16}/> 운영진 로그인
+            <button onClick={() => setShowLoginModal(true)} className="flex items-center gap-1 bg-blue-800 px-2 sm:px-3 py-1.5 rounded text-xs sm:text-sm font-bold hover:bg-blue-900 transition-colors border border-blue-500 whitespace-nowrap">
+              <LogIn size={16}/> <span className="hidden sm:inline">운영진 </span>로그인
             </button>
           )}
-          <button onClick={fetchData} className="bg-blue-600 p-2 rounded-full hover:bg-blue-500"><RefreshCw size={18} className={loading ? "animate-spin" : ""}/></button>
+          <button onClick={fetchData} className="bg-blue-600 p-1.5 sm:p-2 rounded-full hover:bg-blue-500 shrink-0"><RefreshCw size={18} className={loading ? "animate-spin" : ""}/></button>
         </div>
       </header>
 
       {/* --- 네비게이션 --- */}
-      <nav className="flex bg-white border-b overflow-x-auto sticky top-14 z-30">
+      <nav className="flex bg-white border-b overflow-x-auto sticky top-12 sm:top-[60px] z-30">
         {[
           { id: 'players', icon: Users, label: '선수 목록' },
           isAdmin && { id: 'members', icon: Download, label: '회원 장부' }, 
@@ -845,7 +847,7 @@ export default function FutsalCloudApp() {
           { id: 'scoreboard', icon: Trophy, label: '랭킹' },
           { id: 'statistics', icon: PieChartIcon, label: '통계' },
         ].filter(Boolean).map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 flex flex-col items-center p-3 text-xs font-bold whitespace-nowrap ${activeTab===tab.id ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 flex flex-col items-center p-3 text-xs font-bold whitespace-nowrap ${activeTab===tab.id ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50' : 'text-gray-500 hover:bg-gray-50'}`}>
             <tab.icon size={20} className="mb-1"/>{tab.label}
           </button>
         ))}
@@ -1326,10 +1328,11 @@ export default function FutsalCloudApp() {
                 </div>
               </Card>
 
+              {/* 모바일에서도 차트가 접히지 않도록 각 차트 wrapper에 명시적 높이(h-[180px]) 부여 */}
               <Card title={<span className="flex items-center gap-2"><PieChartIcon size={18}/> 회원 구성 비율</span>}>
-                <div className="h-auto md:h-64 w-full flex flex-col md:flex-row gap-4 py-2">
-                  <div className="flex-1 flex flex-col items-center justify-center relative min-h-[160px]">
-                    <p className="absolute top-0 text-sm font-bold text-gray-500">회원 등급</p>
+                <div className="w-full flex flex-col md:flex-row gap-6 py-4">
+                  <div className="flex-1 flex flex-col items-center justify-center relative h-[180px] md:h-full w-full">
+                    <p className="absolute top-0 text-sm font-bold text-gray-500 z-10">회원 등급</p>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie data={groupPieData} innerRadius={35} outerRadius={55} paddingAngle={5} dataKey="value" stroke="none">
@@ -1341,8 +1344,8 @@ export default function FutsalCloudApp() {
                     </ResponsiveContainer>
                   </div>
 
-                  <div className="flex-1 flex flex-col items-center justify-center relative min-h-[160px]">
-                    <p className="absolute top-0 text-sm font-bold text-gray-500">성비 (정식회원)</p>
+                  <div className="flex-1 flex flex-col items-center justify-center relative h-[180px] md:h-full w-full">
+                    <p className="absolute top-0 text-sm font-bold text-gray-500 z-10">성비 (정식회원)</p>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie data={genderPieData} innerRadius={35} outerRadius={55} paddingAngle={5} dataKey="value" stroke="none">
@@ -1355,8 +1358,8 @@ export default function FutsalCloudApp() {
                     </ResponsiveContainer>
                   </div>
 
-                  <div className="flex-1 flex flex-col items-center justify-center relative min-h-[160px]">
-                    <p className="absolute top-0 text-sm font-bold text-gray-500">스타즈 유형</p>
+                  <div className="flex-1 flex flex-col items-center justify-center relative h-[180px] md:h-full w-full">
+                    <p className="absolute top-0 text-sm font-bold text-gray-500 z-10">스타즈 유형</p>
                     {starsTypePieData.length > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
