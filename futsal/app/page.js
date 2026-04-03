@@ -254,7 +254,7 @@ export default function FutsalCloudApp() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  const socialLinks = { instagram: "https://www.instagram.com/yonsei_gsa.fc", youtube: "", kakao: "" };
+  const socialLinks = { instagram: "https://www.instagram.com", youtube: "", kakao: "" };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -283,32 +283,27 @@ export default function FutsalCloudApp() {
     return { m: dt.getMonth() + 1, d: dt.getDate(), day: days[dt.getDay()] };
   };
 
-  // 템플릿 별 텍스트 생성 함수
   const getShareText = (type) => {
     const match = formatKakaoDate(selectedDate);
     const dead = formatKakaoDate(deadlineDate);
     
     if (type === '게스트용') {
-      return `[🏁 총총 FC 게스트초청데이‼️]\n\n안녕하세요 총총FC 여러분~\n${match.m}월 ${match.d}일 경기는 “게스트초청데이” 입니다\n우리 주변에 축구를 사랑하는 지인들을 초대하여 (축잘알,선출환영) 총총FC를 홍보하고, 함께 뛰고 친목할 수 있는 시간을 가지려 합니다! 타대학/대학원 상관없이 초청가능하니 많은 참여 부탁드립니다\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n* 경기 10분전 도착하시어 환복해주시면 원활한 경기진행이 됩니다.\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n* 게스트: 10,000원\n\n🏦 참가비는 '79422633613 카카오뱅크'로 입금 부탁드립니다.\n\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n\n* 일반회원은 입금완료 시 참석 확정입니다!\n* 게스트 비용은 미리 입금해주시면 감사하겠습니다!`;
+      return `[🏁 총총 FC 게스트초청데이‼️]\n\n안녕하세요 총총FC 여러분~\n${match.m}월 ${match.d}일 경기는 “게스트초청데이” 입니다\n우리 주변에 축구를 사랑하는 지인들을 초대하여 (축잘알,선출환영) 총총FC를 홍보하고, 함께 뛰고 친목할 수 있는 시간을 가지려 합니다! 타대학/대학원 상관없이 초청가능하니 많은 참여 부탁드립니다\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n* 경기 10분전 도착하시어 환복해주시면 원활한 경기진행이 됩니다.\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n* 게스트: 10,000원\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n\n* 일반회원은 입금완료 시 참석 확정입니다!\n* 게스트 비용은 미리 입금해주시면 감사하겠습니다!`;
     }
-    
-    // 기본형 (default)
-    return `[🏁 총총 FC 풋살 모임 투표 안내‼️]\n\n안녕하세요 총총FC 여러분\n${match.m}월 ${match.d}일 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n\n🏦 참가비는 '79422633613 카카오뱅크'로 입금 부탁드립니다.\n\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n* 일반회원은 입금완료 시 참석 확정입니다!`;
+    return `[🏁 총총 FC 풋살 모임 투표 안내‼️]\n\n안녕하세요 총총FC 여러분\n${match.m}월 ${match.d}일 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n* 일반회원은 입금완료 시 참석 확정입니다!`;
   };
 
-  // 실제 카카오톡 공유 실행
   const executeKakaoShare = () => {
     if (window.Kakao && window.Kakao.isInitialized()) {
       const magicLinkUrl = `${window.location.origin}${window.location.pathname}?vote=true&date=${selectedDate}`;
       const text = getShareText(shareTemplate);
-
       window.Kakao.Share.sendDefault({ 
         objectType: 'text', 
         text: text, 
         link: { mobileWebUrl: magicLinkUrl, webUrl: magicLinkUrl }, 
         buttonTitle: '투표하러 가기 👆' 
       });
-      setShowShareModal(false); // 전송 후 모달 닫기
+      setShowShareModal(false);
     } else { alert('카카오톡 기능을 불러오는 중입니다. 잠시 후 시도해주세요.'); }
   };
 
@@ -317,7 +312,6 @@ export default function FutsalCloudApp() {
       const match = formatKakaoDate(selectedDate);
       const magicLinkUrl = `${window.location.origin}${window.location.pathname}`;
       const text = `[🏁 총총 FC 당일 경기 안내‼️]\n\n안녕하세요 총총FC 여러분\n오늘 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n* 경기 10분전 도착하시어 환복해주시면 원활한 경기진행이 됩니다.\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층`;
-
       window.Kakao.Share.sendDefault({ objectType: 'text', text: text, link: { mobileWebUrl: magicLinkUrl, webUrl: magicLinkUrl }, buttonTitle: '웹사이트 확인하기' });
     } else { alert('카카오톡 기능을 불러오는 중입니다. 잠시 후 시도해주세요.'); }
   };
@@ -367,16 +361,35 @@ export default function FutsalCloudApp() {
     if (window.confirm('로그아웃 하시겠습니까?')) await supabase.auth.signOut();
   };
 
+  // ✅ 개선된 투표 로직 (Race Condition 및 데이터 날아가는 현상 방지)
   const handleToggleAttendance = async (pid) => {
     const isAttending = tempAttendance.includes(pid);
+    
+    // 1. 화면(UI)부터 먼저 즉시 변경 (빠른 다중 클릭 시 기존 데이터가 덮어써지는 버그 방지)
     if (isAttending) {
       setTempAttendance(prev => prev.filter(id => id !== pid));
-      await supabase.from('match_records').delete().eq('date', selectedDate).eq('player_id', pid);
+      setRecords(prev => prev.filter(r => !(r.date === selectedDate && r.player_id === pid)));
     } else {
       setTempAttendance(prev => [...prev, pid]);
-      await supabase.from('match_records').insert([{ date: selectedDate, player_id: pid }]);
+      setRecords(prev => [...prev, { date: selectedDate, player_id: pid, team: 0, goals: 0, assists: 0 }]);
     }
-    fetchData();
+
+    // 2. 백엔드(Supabase)에 조용히 데이터 전송 (에러 발생 시에만 원상복구 및 경고창)
+    if (isAttending) {
+      const { error } = await supabase.from('match_records').delete().eq('date', selectedDate).eq('player_id', pid);
+      if (error) {
+        console.error("Delete Error:", error);
+        alert('서버 오류로 투표가 취소되지 않았습니다. Supabase 권한(RLS) 설정을 확인해주세요.');
+        fetchData(); // 실패 시 원래 데이터로 복구
+      }
+    } else {
+      const { error } = await supabase.from('match_records').insert([{ date: selectedDate, player_id: pid }]);
+      if (error) {
+        console.error("Insert Error:", error);
+        alert('서버 오류로 투표가 저장되지 않았습니다. Supabase 권한(RLS) 설정을 확인해주세요.');
+        fetchData(); // 실패 시 원래 데이터로 복구
+      }
+    }
   };
 
   const handleAddGuest = async (e) => {
@@ -396,8 +409,15 @@ export default function FutsalCloudApp() {
 
     const { data, error } = await supabase.from('players').insert([newGuestPayload]).select();
     if (!error && data && data.length > 0) {
-      await supabase.from('match_records').insert([{ date: selectedDate, player_id: data[0].id }]);
-      alert('게스트가 추가되고 오늘 경기에 자동 참석 처리되었습니다!');
+      const insertRecord = { date: selectedDate, player_id: data[0].id, team: 0, goals: 0, assists: 0 };
+      const { error: recordError } = await supabase.from('match_records').insert([insertRecord]);
+      
+      if (recordError) {
+         alert('게스트 명단은 추가되었으나 투표 저장 권한이 없습니다. (RLS 확인 필요)');
+      } else {
+         alert('게스트가 추가되고 오늘 경기에 자동 참석 처리되었습니다!');
+      }
+      
       setShowGuestModal(false);
       setGuestForm({ name: '', gender: '남성', inviter: '', level: 5 });
       fetchData();
@@ -584,7 +604,6 @@ export default function FutsalCloudApp() {
     return [{ name: '남성', value: m }, { name: '여성', value: f }].filter(d => d.value > 0);
   }, [players]);
 
-  // 스타즈 가입 유형 파이 차트 데이터 생성
   const starsTypePieData = useMemo(() => {
     let yearly = 0, half = 0;
     players.forEach(p => {
