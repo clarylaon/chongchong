@@ -17,13 +17,12 @@ import {
 } from 'recharts';
 
 // --------------------------------------------------------
-// [중요] Supabase 키
+// [안전한 배포용 환경변수 설정]
 // --------------------------------------------------------
-const supabaseUrl = 'https://vgbrgrlosalarnszmanm.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZnYnJncmxvc2FsYXJuc3ptYW5tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczMzE3NzQsImV4cCI6MjA4MjkwNzc3NH0.py9Bw6NMHFOGAI8daiKrU7IQfTrQh3rsQ6L-qkYIBg0';
-// --------------------------------------------------------
-
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
+// --------------------------------------------------------
 
 // --- 유틸리티 ---
 const calculateLevel = (stats) => {
@@ -57,10 +56,9 @@ const getDday = (expireDateStr) => {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
-// --- 신규 유틸리티 (대시보드용) ---
 const getVoteDeadline = (gameDate) => {
   const date = new Date(gameDate);
-  const dayOfWeek = date.getDay(); // 0(일) ~ 6(토)
+  const dayOfWeek = date.getDay(); 
   const daysToSubtract = dayOfWeek === 0 ? 7 : dayOfWeek;
   date.setDate(date.getDate() - daysToSubtract);
   date.setHours(23, 59, 59, 999);
@@ -69,8 +67,8 @@ const getVoteDeadline = (gameDate) => {
 
 const getRankings = (playersArr, type) => {
   return [...playersArr].sort((a, b) => {
-    if (b[type] !== a[type]) return b[type] - a[type]; // 1차: 기록
-    return b.attendance - a.attendance; // 2차: 출석 횟수
+    if (b[type] !== a[type]) return b[type] - a[type]; 
+    return b.attendance - a.attendance; 
   });
 };
 
@@ -80,7 +78,6 @@ const formatDateUI = (dateString, timeStr) => {
   const d = new Date(dateString).toLocaleDateString('ko-KR', options);
   return timeStr ? `${d} ${timeStr}` : d;
 };
-// ---------------------------------
 
 const DdayBadge = ({ dday }) => {
   if (dday === null) return null;
@@ -118,7 +115,6 @@ const Card = ({ title, children, className = "" }) => (
   </div>
 );
 
-// --- 팝업 컴포넌트들 생략 없이 그대로 유지 ---
 const MoveTeamModal = ({ player, currentTeam, teamCount, onMove, onClose }) => {
   if (!player) return null;
   return (
@@ -231,12 +227,12 @@ const PlayerDetailModal = ({ player, records, totalMatches, onClose }) => {
 };
 
 export default function FutsalCloudApp() {
-  // 기본 화면을 대시보드로 변경
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(false);
   
   const [players, setPlayers] = useState([]);
   const [records, setRecords] = useState([]); 
+  const [schedules, setSchedules] = useState([]); // 일정 상태 추가
   
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [matchTimeStart, setMatchTimeStart] = useState('20:00');
@@ -296,7 +292,7 @@ export default function FutsalCloudApp() {
     document.head.appendChild(script);
     script.onload = () => {
       if (!window.Kakao.isInitialized()) {
-        window.Kakao.init('c83bfe5982c44918880b96c17961d52e'); 
+        window.Kakao.init(process.env.NEXT_PUBLIC_KAKAO_APP_KEY); 
       }
     };
   }, []);
@@ -351,7 +347,7 @@ export default function FutsalCloudApp() {
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       setIsAdmin(!!session);
       if (!session && (activeTab === 'attendance' || activeTab === 'members')) {
-        setActiveTab('dashboard'); // 비로그인 시 대시보드로 튕기게 설정
+        setActiveTab('dashboard'); 
       }
     });
     return () => authListener.subscription.unsubscribe();
@@ -363,17 +359,52 @@ export default function FutsalCloudApp() {
     if (pData) setPlayers(pData);
     const { data: rData } = await supabase.from('match_records').select('*');
     if (rData) setRecords(rData);
+    
+    // DB에서 일정 불러오기
+    const { data: sData } = await supabase.from('match_schedules').select('*').order('date', { ascending: true });
+    if (sData) setSchedules(sData);
+
     setLoading(false);
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  // DB 일정을 바탕으로 다가오는 경기 기본값 세팅
+  useEffect(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const upcoming = schedules.filter(s => s.date >= todayStr);
+    if (upcoming.length > 0) {
+      setSelectedDate(upcoming[0].date);
+      setMatchTimeStart(upcoming[0].start_time || '20:00');
+      setMatchTimeEnd(upcoming[0].end_time || '22:00');
+      setDeadlineDate(upcoming[0].deadline_date || upcoming[0].date);
+      setDeadlineTime(upcoming[0].deadline_time || '18:00');
+    }
+  }, [schedules]);
 
   useEffect(() => {
     const currentDayIds = records.filter(r => r.date === selectedDate).map(r => r.player_id);
     setTempAttendance(currentDayIds);
   }, [records, selectedDate]);
 
-  // --- 대시보드용 파생 데이터 연산 로직 ---
+  // 운영진 일정 저장 기능
+  const handleSaveSchedule = async () => {
+    if (!isAdmin) return;
+    const { error } = await supabase.from('match_schedules').upsert({
+      date: selectedDate,
+      start_time: matchTimeStart,
+      end_time: matchTimeEnd,
+      deadline_date: deadlineDate,
+      deadline_time: deadlineTime
+    });
+    if (!error) {
+      alert(`${selectedDate} 경기가 공식 일정으로 등록되었습니다!`);
+      fetchData();
+    } else {
+      alert('일정 등록에 실패했습니다.');
+    }
+  };
+
   const playerStats = useMemo(() => {
     const stats = {};
     players.forEach(p => { 
@@ -394,7 +425,7 @@ export default function FutsalCloudApp() {
   const previousGameMVPs = useMemo(() => {
     const uniqueDates = [...new Set(records.map(r => r.date))].sort();
     const today = new Date().toISOString().split('T')[0];
-    const pastDates = uniqueDates.filter(d => d < today); // 오늘 이전 가장 최근 경기 날짜 추출
+    const pastDates = uniqueDates.filter(d => d < today); 
     
     if (pastDates.length === 0) return null;
     const prevDate = pastDates[pastDates.length - 1];
@@ -417,13 +448,14 @@ export default function FutsalCloudApp() {
     };
   }, [records, playerStats]);
 
-  const nextGameDate = useMemo(() => {
-    // 임시로 selectedDate 기준 7일 뒤를 '다음 경기 예정'으로 잡습니다.
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + 7);
-    return d.toISOString().split('T')[0];
-  }, [selectedDate]);
-  // ----------------------------------------
+  // 대시보드용 진짜 경기 일정 추출 (오늘 이후)
+  const upcomingSchedules = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    return schedules.filter(s => s.date >= todayStr);
+  }, [schedules]);
+  
+  const upcomingMatch = upcomingSchedules.length > 0 ? upcomingSchedules[0] : null;
+  const nextUpcomingMatch = upcomingSchedules.length > 1 ? upcomingSchedules[1] : null;
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -864,14 +896,12 @@ export default function FutsalCloudApp() {
         </button>
       )}
 
-      {/* PC 버전 오른쪽 공백 플로팅 배너 */}
       <div className="hidden lg:flex flex-col gap-4 fixed right-8 top-1/2 -translate-y-1/2 z-30">
         {socialLinks.instagram && ( <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 p-3 rounded-full text-white shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="인스타그램"><Instagram size={24} /></a>)}
         {socialLinks.youtube && ( <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="bg-red-600 p-3 rounded-full text-white shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="유튜브"> <Youtube size={24} /> </a> )}
         {socialLinks.kakao && ( <a href={socialLinks.kakao} target="_blank" rel="noopener noreferrer" className="bg-yellow-400 p-3 rounded-full text-black shadow-lg hover:scale-110 transition-transform flex items-center justify-center" title="카카오톡"> <MessageCircle size={24} /> </a> )}
       </div>
 
-      {/* --- 모바일 대응 개선된 Header --- */}
       <header className="bg-blue-700 text-white p-3 sm:p-4 sticky top-0 z-40 shadow-md flex justify-between items-center">
         <div className="flex items-center gap-2 sm:gap-6">
           <h1 className="text-base sm:text-xl font-bold flex items-center gap-1 sm:gap-2 whitespace-nowrap">
@@ -898,10 +928,9 @@ export default function FutsalCloudApp() {
         </div>
       </header>
 
-      {/* --- 네비게이션 --- */}
       <nav className="flex bg-white border-b overflow-x-auto sticky top-12 sm:top-[60px] z-30">
         {[
-          { id: 'dashboard', icon: Home, label: '홈' }, // 새로 추가된 대시보드 탭
+          { id: 'dashboard', icon: Home, label: '홈' }, 
           { id: 'players', icon: Users, label: '선수 목록' },
           isAdmin && { id: 'members', icon: Download, label: '회원 장부' }, 
           isAdmin && { id: 'attendance', icon: Calendar, label: '투표 관리' },
@@ -941,22 +970,31 @@ export default function FutsalCloudApp() {
               </div>
               <h2 className="text-xl font-extrabold text-gray-800 mb-4">다가오는 경기</h2>
               
-              <div className="space-y-2 mb-6">
-                <p className="text-xl font-bold flex items-center gap-2">
-                  📅 {formatDateUI(selectedDate, `${matchTimeStart} ~ ${matchTimeEnd}`)}
-                </p>
-                <p className="text-md text-gray-600 flex items-center gap-2">
-                  🏟️ 용산 더베이스 풋살장
-                </p>
-              </div>
+              {upcomingMatch ? (
+                <>
+                  <div className="space-y-2 mb-6">
+                    <p className="text-xl font-bold flex items-center gap-2">
+                      📅 {formatDateUI(upcomingMatch.date, `${upcomingMatch.start_time} ~ ${upcomingMatch.end_time}`)}
+                    </p>
+                    <p className="text-md text-gray-600 flex items-center gap-2">
+                      🏟️ 용산 더베이스 풋살장
+                    </p>
+                  </div>
 
-              <div className="p-4 bg-gray-50 rounded-xl mb-4 text-center border">
-                <p className="text-lg">🔥 현재 <strong className="text-blue-600 text-3xl mx-1">{tempAttendance.length}</strong>명 투표 완료</p>
-              </div>
+                  <div className="p-4 bg-gray-50 rounded-xl mb-4 text-center border">
+                    <p className="text-lg">🔥 현재 <strong className="text-blue-600 text-3xl mx-1">{tempAttendance.length}</strong>명 투표 완료</p>
+                  </div>
 
-              <div className="text-right text-sm text-red-500 font-bold flex justify-end items-center gap-1">
-                ⏰ 마감: {formatDateUI(getVoteDeadline(selectedDate), '23:59')} 까지
-              </div>
+                  <div className="text-right text-sm text-red-500 font-bold flex justify-end items-center gap-1">
+                    ⏰ 마감: {formatDateUI(upcomingMatch.deadline_date, upcomingMatch.deadline_time)} 까지
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-gray-400 font-bold text-lg mb-2">🤷‍♂️ 아직 등록된 일정이 없습니다.</p>
+                  <p className="text-gray-400 text-sm">운영진이 경기 일정을 조율 중입니다. (미정)</p>
+                </div>
+              )}
             </div>
 
             {/* 3. 다음 경기 예정 */}
@@ -964,8 +1002,14 @@ export default function FutsalCloudApp() {
               <h2 className="text-md font-bold text-gray-500 mb-3 flex items-center gap-1">
                 🔜 다음 경기 예정
               </h2>
-              <p className="text-sm font-medium text-gray-600">📅 {formatDateUI(nextGameDate)}</p>
-              <p className="text-sm text-gray-600 mt-1">🏟️ 용산 더베이스 풋살장</p>
+              {nextUpcomingMatch ? (
+                <>
+                  <p className="text-sm font-medium text-gray-600">📅 {formatDateUI(nextUpcomingMatch.date)}</p>
+                  <p className="text-sm text-gray-600 mt-1">🏟️ 용산 더베이스 풋살장</p>
+                </>
+              ) : (
+                <p className="text-sm font-medium text-gray-500">일정 미정</p>
+              )}
             </div>
 
             {/* 4. 명예의 전당 (누적 랭킹 1~3위) */}
@@ -1219,6 +1263,11 @@ export default function FutsalCloudApp() {
                       </div>
                   </div>
                 </div>
+                
+                {/* [추가됨] 경기 일정 등록 버튼 */}
+                <button onClick={handleSaveSchedule} className="w-full bg-indigo-600 text-white py-2 rounded font-bold shadow hover:bg-indigo-700 flex justify-center items-center gap-2 mt-2">
+                  <Calendar size={18} /> 이 날짜로 경기 공식 일정 등록/수정하기
+                </button>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <button onClick={() => setShowShareModal(true)} className="bg-[#FEE500] text-[#191919] px-4 py-3 rounded-lg font-bold hover:bg-[#e5cf00] flex items-center justify-center gap-2 shadow border border-yellow-400">
@@ -1486,7 +1535,6 @@ export default function FutsalCloudApp() {
                 </div>
               </Card>
 
-              {/* 절대 안 사라지도록 고정 높이를 강제 부여 (h-[200px] md:h-[240px]) */}
               <Card title={<span className="flex items-center gap-2"><PieChartIcon size={18}/> 회원 구성 비율</span>}>
                 <div className="w-full flex flex-col md:flex-row gap-6 py-4">
                   <div className="flex-1 flex flex-col items-center justify-center relative h-[200px] md:h-[240px] w-full">
