@@ -316,7 +316,7 @@ export default function FutsalCloudApp() {
     
     // 뒷풀이 여부에 따라 추가될 안내 멘트 생성
     const partyText = hasParty 
-      ? `\n\n🍻 뒷풀이 안내\n장소: ${partyLocation || '추후 공지'}\n* 링크에서 뒷풀이 참석 여부도 꼭 함께 체크해 주세요! (뒷풀이만 참석도 가능)` 
+      ? `\n\n🍻 뒷풀이 안내\n장소: ${partyLocation || '추후 공지'}\n* 링크에서 뒷풀이 참석 여부도 꼭 함께 체크해 주세요!\n(뒷풀이만 참석도 가능)` 
       : '';
     
     if (type === '게스트용') {
