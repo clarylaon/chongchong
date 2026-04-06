@@ -1048,20 +1048,20 @@ export default function FutsalCloudApp() {
                     </p>
                   </div>
 
-                  {/* [추가됨] 뒷풀이 정보 표시 */}
-                  {upcomingMatch.has_party && (
-                    <div className="mb-6 p-4 bg-purple-50 rounded-xl border border-purple-200">
-                      <p className="text-md text-purple-800 font-bold flex items-center gap-2">
-                        🍻 뒷풀이: {upcomingMatch.party_location || '장소 추후 공지'}
-                      </p>
-                      <p className="text-sm text-purple-600 mt-1">
-                        현재 <strong className="text-purple-700 text-xl">{records.filter(r => r.date === upcomingMatch.date && r.party_attendance).length}</strong>명 참석 예정
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="p-4 bg-gray-50 rounded-xl mb-4 text-center border">
+                  {/* 메인 투표 현황 박스 안에 뒷풀이 정보를 통합하여 작게 표시 */}
+                  <div className="p-4 bg-gray-50 rounded-xl mb-4 text-center border shadow-sm">
                     <p className="text-lg">🔥 현재 <strong className="text-blue-600 text-3xl mx-1">{tempAttendance.length}</strong>명 투표 완료</p>
+                    
+                    {upcomingMatch.has_party && (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <p className="text-sm font-bold text-purple-700 flex justify-center items-center gap-1">
+                          🍻 뒷풀이: {upcomingMatch.party_location || '장소 추후 공지'}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          현재 <span className="font-bold text-purple-600">{records.filter(r => r.date === upcomingMatch.date && r.party_attendance).length}</span>명 참석 예정
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   <div className="text-right text-sm text-red-500 font-bold flex justify-end items-center gap-1">
