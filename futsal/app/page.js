@@ -239,6 +239,10 @@ export default function FutsalCloudApp() {
   const [matchTimeEnd, setMatchTimeEnd] = useState('22:00');
   const [deadlineDate, setDeadlineDate] = useState(new Date().toISOString().split('T')[0]);
   const [deadlineTime, setDeadlineTime] = useState('18:00');
+  
+  // 뒷풀이 상태 추가
+  const [hasParty, setHasParty] = useState(false);
+  const [partyLocation, setPartyLocation] = useState('');
 
   const [teamCount, setTeamCount] = useState(2);
   
@@ -369,7 +373,7 @@ export default function FutsalCloudApp() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // DB 일정을 바탕으로 다가오는 경기 기본값 세팅
+  // DB 일정을 바탕으로 다가오는 경기 기본값 세팅 및 뒷풀이 동기화
   useEffect(() => {
     const todayStr = new Date().toISOString().split('T')[0];
     const upcoming = schedules.filter(s => s.date >= todayStr);
@@ -379,6 +383,8 @@ export default function FutsalCloudApp() {
       setMatchTimeEnd(upcoming[0].end_time || '22:00');
       setDeadlineDate(upcoming[0].deadline_date || upcoming[0].date);
       setDeadlineTime(upcoming[0].deadline_time || '18:00');
+      setHasParty(upcoming[0].has_party || false);
+      setPartyLocation(upcoming[0].party_location || '');
     }
   }, [schedules]);
 
@@ -387,7 +393,7 @@ export default function FutsalCloudApp() {
     setTempAttendance(currentDayIds);
   }, [records, selectedDate]);
 
-  // 운영진 일정 저장 기능
+  // 운영진 일정 저장 기능 (뒷풀이 정보 포함)
   const handleSaveSchedule = async () => {
     if (!isAdmin) return;
     const { error } = await supabase.from('match_schedules').upsert({
@@ -395,10 +401,12 @@ export default function FutsalCloudApp() {
       start_time: matchTimeStart,
       end_time: matchTimeEnd,
       deadline_date: deadlineDate,
-      deadline_time: deadlineTime
+      deadline_time: deadlineTime,
+      has_party: hasParty,
+      party_location: partyLocation
     });
     if (!error) {
-      alert(`${selectedDate} 경기가 공식 일정으로 등록되었습니다!`);
+      alert(`${selectedDate} 경기 및 뒷풀이 일정이 등록되었습니다!`);
       fetchData();
     } else {
       alert('일정 등록에 실패했습니다.');
@@ -470,10 +478,9 @@ export default function FutsalCloudApp() {
     if (window.confirm('로그아웃 하시겠습니까?')) await supabase.auth.signOut();
   };
 
+  // 경기 투표 함수 (로그 기록 포함)
   const handleToggleAttendance = async (pid) => {
     const isAttending = tempAttendance.includes(pid);
-    
-    // [추가됨] 로그에 남길 플레이어 이름 찾기
     const playerInfo = players.find(p => p.id === pid);
     const playerName = playerInfo ? playerInfo.name : '알수없음';
     
@@ -482,7 +489,7 @@ export default function FutsalCloudApp() {
       setRecords(prev => prev.filter(r => !(r.date === selectedDate && r.player_id === pid)));
     } else {
       setTempAttendance(prev => [...prev, pid]);
-      setRecords(prev => [...prev, { date: selectedDate, player_id: pid, team: 0, goals: 0, assists: 0 }]);
+      setRecords(prev => [...prev, { date: selectedDate, player_id: pid, team: 0, goals: 0, assists: 0, party_attendance: false }]);
     }
 
     if (isAttending) {
@@ -492,19 +499,52 @@ export default function FutsalCloudApp() {
         alert('서버 오류로 투표가 취소되지 않았습니다. Supabase 권한(RLS) 설정을 확인해주세요.');
         fetchData();
       } else {
-        // [추가됨] 투표 취소 성공 시 로그 기록
         await supabase.from('vote_logs').insert([{ match_date: selectedDate, player_name: playerName, action: '취소' }]);
       }
     } else {
-      const { error } = await supabase.from('match_records').insert([{ date: selectedDate, player_id: pid }]);
+      const { error } = await supabase.from('match_records').insert([{ date: selectedDate, player_id: pid, party_attendance: false }]);
       if (error) {
         console.error("Insert Error:", error);
         alert('서버 오류로 투표가 저장되지 않았습니다. Supabase 권한(RLS) 설정을 확인해주세요.');
         fetchData();
       } else {
-        // [추가됨] 투표 참여 성공 시 로그 기록
         await supabase.from('vote_logs').insert([{ match_date: selectedDate, player_name: playerName, action: '투표' }]);
       }
+    }
+  };
+
+  // 뒷풀이 투표 전용 함수
+  const handleToggleParty = async (pid) => {
+    const isMatchAttending = tempAttendance.includes(pid);
+    if (!isMatchAttending) return alert('경기 투표를 먼저 완료해주세요!');
+
+    const recordIndex = records.findIndex(r => r.date === selectedDate && r.player_id === pid);
+    if (recordIndex === -1) return;
+    
+    const currentPartyStatus = records[recordIndex].party_attendance || false;
+    const newStatus = !currentPartyStatus;
+
+    // 즉시 UI 반영
+    const newRecords = [...records];
+    newRecords[recordIndex].party_attendance = newStatus;
+    setRecords(newRecords);
+
+    const { error } = await supabase
+      .from('match_records')
+      .update({ party_attendance: newStatus })
+      .eq('date', selectedDate)
+      .eq('player_id', pid);
+
+    if (!error) {
+      const pName = players.find(p => p.id === pid)?.name || '알수없음';
+      await supabase.from('vote_logs').insert([{ 
+        match_date: selectedDate, 
+        player_name: pName, 
+        action: newStatus ? '뒷풀이 참석' : '뒷풀이 취소' 
+      }]);
+    } else {
+       alert('뒷풀이 투표 저장에 실패했습니다.');
+       fetchData(); // 롤백
     }
   };
 
@@ -525,13 +565,14 @@ export default function FutsalCloudApp() {
 
     const { data, error } = await supabase.from('players').insert([newGuestPayload]).select();
     if (!error && data && data.length > 0) {
-      const insertRecord = { date: selectedDate, player_id: data[0].id, team: 0, goals: 0, assists: 0 };
+      const insertRecord = { date: selectedDate, player_id: data[0].id, team: 0, goals: 0, assists: 0, party_attendance: false };
       const { error: recordError } = await supabase.from('match_records').insert([insertRecord]);
       
       if (recordError) {
-         alert('게스트 명단은 추가되었으나 투표 저장 권한이 없습니다. (RLS 확인 필요)');
+         alert('게스트 명단은 추가되었으나 투표 저장 권한이 없습니다.');
       } else {
          alert('게스트가 추가되고 오늘 경기에 자동 참석 처리되었습니다!');
+         await supabase.from('vote_logs').insert([{ match_date: selectedDate, player_name: guestForm.name, action: '게스트 투표' }]);
       }
       
       setShowGuestModal(false);
@@ -756,6 +797,7 @@ export default function FutsalCloudApp() {
     const regulars = attendedPlayers.filter(p => p.group !== '게스트');
     const guests = attendedPlayers.filter(p => p.group === '게스트');
 
+    // 패키지(초대자-게스트) 묶기
     regulars.forEach(inviter => {
         const myGuests = guests.filter(g => g.stars_type === inviter.name);
         if (myGuests.length > 0) {
@@ -773,6 +815,7 @@ export default function FutsalCloudApp() {
 
     bundles.sort((a, b) => b.reduce((s,p)=>s+p.level,0) - a.reduce((s,p)=>s+p.level,0));
     
+    // 패키지 배정
     bundles.forEach(bundle => {
         let targetIdx = 0; let minSum = Infinity;
         const minSize = Math.min(...teams.map(t => t.length));
@@ -785,6 +828,7 @@ export default function FutsalCloudApp() {
         teams[targetIdx].push(...bundle);
     });
 
+    // 여성 싱글 배정
     singleFemales.forEach(p => {
         const minSize = Math.min(...teams.map(t => t.length));
         const candidates = teams.map((t, i) => t.length === minSize ? i : -1).filter(i => i !== -1);
@@ -796,6 +840,7 @@ export default function FutsalCloudApp() {
         teams[targetIdx].push(p);
     });
 
+    // 남성 싱글 배정
     singleMales.forEach(p => {
         const minSize = Math.min(...teams.map(t => t.length));
         const candidates = teams.map((t, i) => t.length === minSize ? i : -1).filter(i => i !== -1);
@@ -809,7 +854,12 @@ export default function FutsalCloudApp() {
 
     const updates = [];
     teams.forEach((team, idx) => {
-      team.forEach(p => { updates.push({ date: selectedDate, player_id: p.id, team: idx + 1, goals: 0, assists: 0 }); });
+      team.forEach(p => { 
+        // 기존 뒷풀이 여부 유지
+        const existingRecord = records.find(r => r.date === selectedDate && r.player_id === p.id);
+        const partyAtt = existingRecord ? existingRecord.party_attendance : false;
+        updates.push({ date: selectedDate, player_id: p.id, team: idx + 1, goals: 0, assists: 0, party_attendance: partyAtt }); 
+      });
     });
 
     const { error } = await supabase.from('match_records').upsert(updates, { onConflict: 'date, player_id' });
@@ -827,8 +877,15 @@ export default function FutsalCloudApp() {
     if (!error) { alert('이동되었습니다.'); setMovePlayerTarget(null); fetchData(); }
   };
 
+  // 등급 필터링에서 빈 그룹이나 오타 그룹도 '일반'으로 취급하여 표시
   const processedPlayers = useMemo(() => {
     let data = [...players];
+    // 데이터 정규화: 스타즈/게스트가 아니면 전부 일반으로 표시
+    data = data.map(p => ({
+      ...p,
+      group: (p.group === '스타즈' || p.group === '게스트') ? p.group : '일반'
+    }));
+
     if (!showGuestsInList) {
       data = data.filter(p => p.group !== '게스트');
     }
@@ -990,6 +1047,18 @@ export default function FutsalCloudApp() {
                       🏟️ 용산 더베이스 풋살장
                     </p>
                   </div>
+
+                  {/* [추가됨] 뒷풀이 정보 표시 */}
+                  {upcomingMatch.has_party && (
+                    <div className="mb-6 p-4 bg-purple-50 rounded-xl border border-purple-200">
+                      <p className="text-md text-purple-800 font-bold flex items-center gap-2">
+                        🍻 뒷풀이: {upcomingMatch.party_location || '장소 추후 공지'}
+                      </p>
+                      <p className="text-sm text-purple-600 mt-1">
+                        현재 <strong className="text-purple-700 text-xl">{records.filter(r => r.date === upcomingMatch.date && r.party_attendance).length}</strong>명 참석 예정
+                      </p>
+                    </div>
+                  )}
 
                   <div className="p-4 bg-gray-50 rounded-xl mb-4 text-center border">
                     <p className="text-lg">🔥 현재 <strong className="text-blue-600 text-3xl mx-1">{tempAttendance.length}</strong>명 투표 완료</p>
@@ -1272,9 +1341,28 @@ export default function FutsalCloudApp() {
                           <input type="time" className="border border-red-300 p-2 rounded w-24" value={deadlineTime} onChange={e=>setDeadlineTime(e.target.value)}/>
                       </div>
                   </div>
+                  
+                  {/* [추가됨] 뒷풀이 설정 UI */}
+                  <div className="flex flex-col md:flex-row items-center gap-4 border-t pt-3">
+                    <div className="flex items-center gap-2 w-full md:w-1/3">
+                      <span className="font-bold text-purple-700 w-20">뒷풀이:</span>
+                      <label className="flex items-center cursor-pointer">
+                        <input type="checkbox" className="w-5 h-5 rounded border-purple-300 text-purple-600 focus:ring-purple-500" 
+                               checked={hasParty} onChange={e => setHasParty(e.target.checked)} />
+                        <span className="ml-2 text-sm font-bold">{hasParty ? '있음' : '없음'}</span>
+                      </label>
+                    </div>
+                    {hasParty && (
+                      <div className="flex items-center gap-2 w-full md:w-2/3">
+                        <span className="font-bold text-purple-700 w-20 shrink-0">장소:</span>
+                        <input placeholder="뒷풀이 장소를 입력하세요" className="border border-purple-300 p-2 rounded flex-1 text-sm" 
+                               value={partyLocation} onChange={e => setPartyLocation(e.target.value)} />
+                      </div>
+                    )}
+                  </div>
+
                 </div>
                 
-                {/* [추가됨] 경기 일정 등록 버튼 */}
                 <button onClick={handleSaveSchedule} className="w-full bg-indigo-600 text-white py-2 rounded font-bold shadow hover:bg-indigo-700 flex justify-center items-center gap-2 mt-2">
                   <Calendar size={18} /> 이 날짜로 경기 공식 일정 등록/수정하기
                 </button>
@@ -1349,7 +1437,8 @@ export default function FutsalCloudApp() {
                   }
 
                   const starsPlayers = attendedPlayers.filter(p => p.group === '스타즈');
-                  const regularPlayers = attendedPlayers.filter(p => p.group === '일반');
+                  // [수정됨] 정희찬 감독님 등 그룹이 비정상인 경우도 일반으로 포함되게 수정
+                  const regularPlayers = attendedPlayers.filter(p => p.group !== '스타즈' && p.group !== '게스트');
                   const guestPlayers = attendedPlayers.filter(p => p.group === '게스트');
                   const totalCount = attendedPlayers.length;
 
@@ -1734,7 +1823,7 @@ export default function FutsalCloudApp() {
         </div>
       )}
 
-      {/* --- 게스트용 투표 팝업 --- */}
+      {/* --- [수정됨] 사용자 투표 팝업 (뒷풀이 버튼 추가) --- */}
       {showVoteModal && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-lg w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
@@ -1747,25 +1836,46 @@ export default function FutsalCloudApp() {
               <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg text-center shadow-sm">
                 <p className="text-sm text-blue-800 font-medium">본인 이름을 누르면 <b>즉시 투표(자동 저장)</b> 됩니다.</p>
                 <p className="text-xs text-blue-600 mt-1">* 한 번 더 누르면 불참으로 변경됩니다.</p>
-                <p className="text-xs text-blue-600 mt-1">* 늦참이나 뒤풀이 여부는 카톡방에 남겨주세요!</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {hasParty && (
+                 <div className="bg-purple-50 border border-purple-200 p-2 rounded-lg text-center shadow-sm">
+                    <p className="text-xs text-purple-800 font-bold flex items-center justify-center gap-1">
+                      🍻 오늘 뒷풀이가 있습니다! 참석 시 맥주 버튼을 눌러주세요.
+                    </p>
+                 </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-4">
                 {['남성','여성'].map(gender => (
                   <div key={gender} className="space-y-2">
                     <div className="bg-gray-100 text-center font-bold py-1.5 rounded text-sm text-gray-700 shadow-sm border">{gender}</div>
-                    {players.filter(p=>p.gender===gender).map(p => {
-                      const isChecked = tempAttendance.includes(p.id);
-                      return (
-                        <div key={p.id} onClick={()=>handleToggleAttendance(p.id)}
-                             className={`p-2.5 rounded border cursor-pointer flex justify-between items-center transition-all ${isChecked ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500 shadow-md' : 'bg-white hover:bg-gray-50'}`}>
-                          <PlayerName player={p}/>
-                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ml-2 ${isChecked?'bg-blue-600 border-blue-600':'border-gray-300'}`}>
-                            {isChecked && <UserCheck size={12} className="text-white"/>}
+                    <div className="grid grid-cols-2 gap-2">
+                      {players.filter(p=>p.gender===gender).map(p => {
+                        const isChecked = tempAttendance.includes(p.id);
+                        const isPartyChecked = records.find(r => r.player_id === p.id && r.date === selectedDate)?.party_attendance;
+                        
+                        return (
+                          <div key={p.id} className="flex gap-1 items-center">
+                            <div onClick={()=>handleToggleAttendance(p.id)}
+                                 className={`flex-1 p-2 rounded border cursor-pointer flex justify-between items-center transition-all ${isChecked ? 'bg-blue-50 border-blue-500 shadow-md ring-1 ring-blue-500' : 'bg-white hover:bg-gray-50'}`}>
+                              <PlayerName player={p}/>
+                              <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ml-1 ${isChecked?'bg-blue-600 border-blue-600':'border-gray-300'}`}>
+                                {isChecked && <UserCheck size={10} className="text-white"/>}
+                              </div>
+                            </div>
+                            
+                            {hasParty && isChecked && (
+                              <button onClick={(e) => { e.stopPropagation(); handleToggleParty(p.id); }}
+                                      className={`p-1.5 rounded border transition-all flex flex-col items-center justify-center w-10 shrink-0 ${isPartyChecked ? 'bg-yellow-400 border-yellow-500 text-white shadow-inner' : 'bg-gray-100 border-gray-300 text-gray-400 opacity-60 hover:opacity-100'}`}>
+                                <span className="text-[9px] font-bold leading-none mb-0.5">뒷풀이</span>
+                                <span className="text-sm leading-none">🍺</span>
+                              </button>
+                            )}
                           </div>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
                   </div>
                 ))}
               </div>
