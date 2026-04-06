@@ -473,6 +473,10 @@ export default function FutsalCloudApp() {
   const handleToggleAttendance = async (pid) => {
     const isAttending = tempAttendance.includes(pid);
     
+    // [추가됨] 로그에 남길 플레이어 이름 찾기
+    const playerInfo = players.find(p => p.id === pid);
+    const playerName = playerInfo ? playerInfo.name : '알수없음';
+    
     if (isAttending) {
       setTempAttendance(prev => prev.filter(id => id !== pid));
       setRecords(prev => prev.filter(r => !(r.date === selectedDate && r.player_id === pid)));
@@ -487,6 +491,9 @@ export default function FutsalCloudApp() {
         console.error("Delete Error:", error);
         alert('서버 오류로 투표가 취소되지 않았습니다. Supabase 권한(RLS) 설정을 확인해주세요.');
         fetchData();
+      } else {
+        // [추가됨] 투표 취소 성공 시 로그 기록
+        await supabase.from('vote_logs').insert([{ match_date: selectedDate, player_name: playerName, action: '취소' }]);
       }
     } else {
       const { error } = await supabase.from('match_records').insert([{ date: selectedDate, player_id: pid }]);
@@ -494,6 +501,9 @@ export default function FutsalCloudApp() {
         console.error("Insert Error:", error);
         alert('서버 오류로 투표가 저장되지 않았습니다. Supabase 권한(RLS) 설정을 확인해주세요.');
         fetchData();
+      } else {
+        // [추가됨] 투표 참여 성공 시 로그 기록
+        await supabase.from('vote_logs').insert([{ match_date: selectedDate, player_name: playerName, action: '투표' }]);
       }
     }
   };
