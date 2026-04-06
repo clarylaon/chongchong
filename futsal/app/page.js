@@ -956,11 +956,29 @@ export default function FutsalCloudApp() {
     <div className="min-h-screen bg-gray-100 font-sans pb-20 text-gray-800 relative">
       
       {!isAdmin && (
-        <button onClick={() => setShowVoteModal(true)}
-          className="fixed bottom-8 right-6 bg-blue-600 text-white px-5 py-4 rounded-full shadow-2xl hover:bg-blue-700 hover:scale-105 transition-transform z-40 flex items-center justify-center gap-2 border-2 border-white">
-          <Calendar size={24} />
-          <span className="font-bold text-lg shadow-sm">투표하기</span>
-        </button>
+        (() => {
+          // 현재 시간과 마감 시간을 비교해서 마감 여부(true/false)를 계산합니다.
+          const isVoteClosed = new Date() > new Date(`${deadlineDate}T${deadlineTime}:00`);
+          
+          return (
+            <button 
+              onClick={() => {
+                if (isVoteClosed) {
+                  alert('투표 시간이 마감되었습니다! 늦참 및 변동 사항은 카톡방이나 운영진에게 문의해주세요.');
+                } else {
+                  setShowVoteModal(true);
+                }
+              }}
+              className={`fixed bottom-8 right-6 text-white px-5 py-4 rounded-full shadow-2xl hover:scale-105 transition-transform z-40 flex items-center justify-center gap-2 border-2 border-white 
+                ${isVoteClosed ? 'bg-gray-500 hover:bg-gray-600' : 'bg-blue-600 hover:bg-blue-700'}`}
+            >
+              <Calendar size={24} />
+              <span className="font-bold text-lg shadow-sm">
+                {isVoteClosed ? '투표 마감됨' : '투표하기'}
+              </span>
+            </button>
+          );
+        })()
       )}
 
       <div className="hidden lg:flex flex-col gap-4 fixed right-8 top-1/2 -translate-y-1/2 z-30">
