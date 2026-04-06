@@ -964,7 +964,7 @@ export default function FutsalCloudApp() {
             <button 
               onClick={() => {
                 if (isVoteClosed) {
-                  alert('투표 시간이 마감되었습니다! 늦참 및 변동 사항은 카톡방이나 운영진에게 문의해주세요.');
+                  alert('투표 시간이 마감되었습니다!\n늦참 및 변동 사항은 카톡방이나 운영진에게 문의해주세요.');
                 } else {
                   setShowVoteModal(true);
                 }
