@@ -1553,72 +1553,83 @@ export default function FutsalCloudApp() {
               </Card>
             )}
 
+            {/* [수정됨] DB에 저장된 실제 팀 개수에 맞춰서 화면에 자동으로 3팀, 4팀 다 그려주기 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {Array.from({length: teamCount}).map((_, i) => {
-                const teamNo = i + 1;
-                const members = records.filter(r => r.date === selectedDate && r.team === teamNo);
-                const teamPlayers = members.map(r => players.find(p => p.id === r.player_id)).filter(Boolean);
+              {(() => {
+                // 1. DB에 저장된 오늘 경기 기록 중, 가장 숫자가 높은 팀 번호를 찾습니다.
+                const maxTeamInDB = records
+                  .filter(r => r.date === selectedDate)
+                  .reduce((max, r) => Math.max(max, r.team || 0), 0);
                 
-                const avg = teamPlayers.length ? (teamPlayers.reduce((a,b)=>a+b.level,0)/teamPlayers.length).toFixed(2) : 0;
-                const maleCount = teamPlayers.filter(p => p.gender === '남성').length;
-                const femaleCount = teamPlayers.filter(p => p.gender === '여성').length;
+                // 2. 화면에 그려줄 팀 개수 (운영진 설정값과 DB 실제 팀 수 중 큰 값, 최소 2팀 보장)
+                const displayCount = Math.max(Number(teamCount) || 2, maxTeamInDB, 2);
 
-                return (
-                  <Card key={teamNo} title={`TEAM ${teamNo}`}>
-                    <div className="text-xs text-gray-500 mb-3 flex justify-between border-b pb-2">
-                      <span className="font-bold">총 {teamPlayers.length}명 <span className="font-normal">(남{maleCount} / 여{femaleCount})</span></span>
-                      <span>평균 Lv.{avg}</span>
-                    </div>
+                return Array.from({ length: displayCount }).map((_, i) => {
+                  const teamNo = i + 1;
+                  const members = records.filter(r => r.date === selectedDate && r.team === teamNo);
+                  const teamPlayers = members.map(r => players.find(p => p.id === r.player_id)).filter(Boolean);
+                  
+                  const avg = teamPlayers.length ? (teamPlayers.reduce((a,b)=>a+b.level,0)/teamPlayers.length).toFixed(2) : 0;
+                  const maleCount = teamPlayers.filter(p => p.gender === '남성').length;
+                  const femaleCount = teamPlayers.filter(p => p.gender === '여성').length;
 
-                    {members.length === 0 ? <div className="text-center text-gray-400 py-4">팀원이 없습니다.</div> : 
-                      <div className="space-y-3">
-                        {members.map(record => {
-                          const p = players.find(pl => pl.id === record.player_id);
-                          if (!p) return null;
-                          return (
-                            <div key={record.id} className="bg-gray-50 p-2 rounded border flex flex-col gap-2">
-                              <div className="flex justify-between items-center">
-                                <span className="font-bold flex items-center gap-1 text-sm md:text-base">
-                                  <span className={`w-2 h-2 rounded-full shrink-0 ${p.gender==='남성'?'bg-blue-500':'bg-pink-500'}`}></span>
-                                  <PlayerName player={p}/>
-                                  <span className="text-xs text-gray-400 font-normal shrink-0 ml-1">({p.level})</span>
-                                </span>
-                                
-                                {isAdmin && (
-                                  <button onClick={()=>setMovePlayerTarget({ p, teamNo: record.team })} 
-                                          className="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded flex items-center gap-1 shrink-0">
-                                      <ArrowRightLeft size={12}/> 이동
-                                  </button>
-                                )}
-                              </div>
-                              <div className="flex gap-2">
-                                <div className="flex-1 flex items-center bg-white border rounded px-2 py-1">
-                                  <span className="text-xs font-bold text-gray-500 mr-2">골</span>
-                                  {isAdmin ? (
-                                    <input type="number" min="0" className="w-full text-center font-bold text-blue-600 outline-none" 
-                                      value={record.goals} onChange={(e)=>updateStat(p.id, 'goals', e.target.value)}/>
-                                  ) : (
-                                    <span className="w-full text-center font-bold text-blue-600">{record.goals}</span>
-                                  )}
-                                </div>
-                                <div className="flex-1 flex items-center bg-white border rounded px-2 py-1">
-                                  <span className="text-xs font-bold text-gray-500 mr-2">어시</span>
-                                  {isAdmin ? (
-                                    <input type="number" min="0" className="w-full text-center font-bold text-green-600 outline-none" 
-                                      value={record.assists} onChange={(e)=>updateStat(p.id, 'assists', e.target.value)}/>
-                                  ) : (
-                                    <span className="w-full text-center font-bold text-green-600">{record.assists}</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          )
-                        })}
+                  return (
+                    <Card key={teamNo} title={`TEAM ${teamNo}`}>
+                      <div className="text-xs text-gray-500 mb-3 flex justify-between border-b pb-2">
+                        <span className="font-bold">총 {teamPlayers.length}명 <span className="font-normal">(남{maleCount} / 여{femaleCount})</span></span>
+                        <span>평균 Lv.{avg}</span>
                       </div>
-                    }
-                  </Card>
-                )
-              })}
+
+                      {members.length === 0 ? <div className="text-center text-gray-400 py-4">팀원이 없습니다.</div> : 
+                        <div className="space-y-3">
+                          {members.map(record => {
+                            const p = players.find(pl => pl.id === record.player_id);
+                            if (!p) return null;
+                            return (
+                              <div key={record.id} className="bg-gray-50 p-2 rounded border flex flex-col gap-2">
+                                <div className="flex justify-between items-center">
+                                  <span className="font-bold flex items-center gap-1 text-sm md:text-base">
+                                    <span className={`w-2 h-2 rounded-full shrink-0 ${p.gender==='남성'?'bg-blue-500':'bg-pink-500'}`}></span>
+                                    <PlayerName player={p}/>
+                                    <span className="text-xs text-gray-400 font-normal shrink-0 ml-1">({p.level})</span>
+                                  </span>
+                                  
+                                  {isAdmin && (
+                                    <button onClick={()=>setMovePlayerTarget({ p, teamNo: record.team })} 
+                                            className="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded flex items-center gap-1 shrink-0">
+                                        <ArrowRightLeft size={12}/> 이동
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="flex gap-2">
+                                  <div className="flex-1 flex items-center bg-white border rounded px-2 py-1">
+                                    <span className="text-xs font-bold text-gray-500 mr-2">골</span>
+                                    {isAdmin ? (
+                                      <input type="number" min="0" className="w-full text-center font-bold text-blue-600 outline-none" 
+                                        value={record.goals} onChange={(e)=>updateStat(p.id, 'goals', e.target.value)}/>
+                                    ) : (
+                                      <span className="w-full text-center font-bold text-blue-600">{record.goals}</span>
+                                    )}
+                                  </div>
+                                  <div className="flex-1 flex items-center bg-white border rounded px-2 py-1">
+                                    <span className="text-xs font-bold text-gray-500 mr-2">어시</span>
+                                    {isAdmin ? (
+                                      <input type="number" min="0" className="w-full text-center font-bold text-green-600 outline-none" 
+                                        value={record.assists} onChange={(e)=>updateStat(p.id, 'assists', e.target.value)}/>
+                                    ) : (
+                                      <span className="w-full text-center font-bold text-green-600">{record.assists}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      }
+                    </Card>
+                  )
+                });
+              })()}
             </div>
           </>
         )}
