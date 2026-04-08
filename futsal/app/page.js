@@ -1906,32 +1906,45 @@ export default function FutsalCloudApp() {
                 {['남성','여성'].map(gender => (
                   <div key={gender} className="space-y-2">
                     <div className="bg-gray-100 text-center font-bold py-1.5 rounded text-sm text-gray-700 shadow-sm border">{gender}</div>
+                    
+                    {/* [수정됨] 애니메이션 적용된 2줄 레이아웃 */}
                     <div className="grid grid-cols-2 gap-2">
                       {players.filter(p=>p.gender===gender).map(p => {
                         const isChecked = tempAttendance.includes(p.id);
                         const isPartyChecked = records.find(r => r.player_id === p.id && r.date === selectedDate)?.party_attendance;
                         
                         return (
-                          <div key={p.id} className="flex gap-1 items-center">
+                          <div key={p.id} className="flex items-stretch h-[44px]"> {/* 버튼 높이 고정 */}
+                            
+                            {/* 1. 이름 버튼: 맥주 버튼이 나오면 스르륵 폭이 줄어듦 */}
                             <div onClick={()=>handleToggleAttendance(p.id)}
-                                 className={`flex-1 p-2 rounded border cursor-pointer flex justify-between items-center transition-all ${isChecked ? 'bg-blue-50 border-blue-500 shadow-md ring-1 ring-blue-500' : 'bg-white hover:bg-gray-50'}`}>
-                              <PlayerName player={p}/>
-                              <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ml-1 ${isChecked?'bg-blue-600 border-blue-600':'border-gray-300'}`}>
+                                 className={`flex-1 min-w-0 px-2 flex justify-between items-center rounded border cursor-pointer transition-all duration-300 ease-in-out ${isChecked ? 'bg-blue-50 border-blue-500 shadow-sm ring-1 ring-blue-500' : 'bg-white hover:bg-gray-50'}`}>
+                              
+                              <div className="truncate pr-1"> {/* 좁아져도 이름이 안 깨지도록 처리 */}
+                                <PlayerName player={p}/>
+                              </div>
+                              
+                              <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors ${isChecked?'bg-blue-600 border-blue-600':'border-gray-300'}`}>
                                 {isChecked && <UserCheck size={10} className="text-white"/>}
                               </div>
                             </div>
                             
-                            {hasParty && isChecked && (
-                              <button onClick={(e) => { e.stopPropagation(); handleToggleParty(p.id); }}
-                                      className={`p-1.5 rounded border transition-all flex flex-col items-center justify-center w-10 shrink-0 ${isPartyChecked ? 'bg-yellow-400 border-yellow-500 text-white shadow-inner' : 'bg-gray-100 border-gray-300 text-gray-400 opacity-60 hover:opacity-100'}`}>
-                                <span className="text-[9px] font-bold leading-none mb-0.5">뒷풀이</span>
-                                <span className="text-sm leading-none">🍺</span>
-                              </button>
+                            {/* 2. 맥주 버튼: 평소엔 폭 0으로 숨어있다가 스르륵 나타남 */}
+                            {hasParty && (
+                              <div className={`overflow-hidden transition-all duration-300 ease-in-out flex items-stretch ${isChecked ? 'w-10 ml-1.5 opacity-100' : 'w-0 ml-0 opacity-0'}`}>
+                                <button onClick={(e) => { e.stopPropagation(); handleToggleParty(p.id); }}
+                                        className={`w-full flex flex-col items-center justify-center rounded border transition-colors ${isPartyChecked ? 'bg-yellow-400 border-yellow-500 text-white shadow-inner' : 'bg-gray-100 border-gray-300 text-gray-500 opacity-80 hover:opacity-100'}`}>
+                                  <span className="text-[9px] font-bold leading-none mb-0.5">뒷풀이</span>
+                                  <span className="text-sm leading-none">🍺</span>
+                                </button>
+                              </div>
                             )}
+                            
                           </div>
                         )
                       })}
                     </div>
+
                   </div>
                 ))}
               </div>
