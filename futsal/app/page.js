@@ -2035,15 +2035,25 @@ export default function FutsalCloudApp() {
       )}
 
       {/* --- 팀 이동 팝업 --- */}
-      {movePlayerTarget && (
-        <MoveTeamModal
-          player={movePlayerTarget.p}
-          currentTeam={movePlayerTarget.teamNo}
-          teamCount={teamCount}
-          onMove={handleMoveTeam}
-          onClose={() => setMovePlayerTarget(null)}
-        />
-      )}
+      {movePlayerTarget && (() => {
+        // 실제 DB에 생성되어 있는 가장 높은 팀 번호를 찾습니다.
+        const maxTeamInDB = records
+          .filter(r => r.date === selectedDate)
+          .reduce((max, r) => Math.max(max, r.team || 0), 0);
+        
+        // 이동 가능한 팝업 버튼 개수 (운영진 입력값과 DB 실제 팀 수 중 큰 값을 사용)
+        const actualTeamCount = Math.max(Number(teamCount) || 2, maxTeamInDB, 2);
+
+        return (
+          <MoveTeamModal
+            player={movePlayerTarget.p}
+            currentTeam={movePlayerTarget.teamNo}
+            teamCount={actualTeamCount} // 이제 3팀, 4팀 버튼이 정상적으로 뜹니다!
+            onMove={handleMoveTeam}
+            onClose={() => setMovePlayerTarget(null)}
+          />
+        );
+      })()}
 
       {/* --- 뒷풀이 전체 참석 명단 모달 --- */}
       {showPartyListModal && upcomingMatch && (
