@@ -886,18 +886,22 @@ export default function FutsalCloudApp() {
         teams[targetIdx].push(p);
     });
 
-    const updates = [];
+    // 오직 'team' 번호만 하나씩 안전하게 업데이트 (골, 어시스트, 뒷풀이 여부 보존!)
+    const updatePromises = [];
     teams.forEach((team, idx) => {
       team.forEach(p => { 
-        const existingRecord = records.find(r => r.date === selectedDate && r.player_id === p.id);
-        const partyAtt = existingRecord ? existingRecord.party_attendance : false;
-        updates.push({ date: selectedDate, player_id: p.id, team: idx + 1, goals: 0, assists: 0, party_attendance: partyAtt }); 
+        const promise = supabase
+          .from('match_records')
+          .update({ team: idx + 1 })
+          .eq('date', selectedDate)
+          .eq('player_id', p.id);
+        updatePromises.push(promise);
       });
     });
 
-    const { error } = await supabase.from('match_records').upsert(updates, { onConflict: 'date, player_id' });
-    if (!error) { alert('팀 배정 완료!'); fetchData(); }
-  };
+    await Promise.all(updatePromises);
+    alert('팀 배정 완료!'); 
+    fetchData();
 
   const updateStat = async (pid, field, value) => {
     if (value < 0) return; 
