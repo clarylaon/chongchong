@@ -886,7 +886,7 @@ export default function FutsalCloudApp() {
         teams[targetIdx].push(p);
     });
 
-    // 오직 'team' 번호만 하나씩 안전하게 업데이트 (골, 어시스트, 뒷풀이 여부 보존!)
+    // --- [버그 수정된 부분] 오직 team 번호만 안전하게 업데이트 ---
     const updatePromises = [];
     teams.forEach((team, idx) => {
       team.forEach(p => { 
@@ -902,6 +902,7 @@ export default function FutsalCloudApp() {
     await Promise.all(updatePromises);
     alert('팀 배정 완료!'); 
     fetchData();
+  };
 
   const updateStat = async (pid, field, value) => {
     if (value < 0) return; 
