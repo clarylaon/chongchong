@@ -597,41 +597,68 @@ export default function FutsalCloudApp() {
 
   const handleAddGuest = async (e) => {
     e.preventDefault();
+    
+    // [방어막] 마감 시간 체크
     const isVoteClosed = new Date() > new Date(`${deadlineDate}T${deadlineTime}:00`);
     if (isVoteClosed && !isAdmin) return alert('⏰ 투표 시간이 마감되었습니다!\n지각이나 불참 등 변동 사항은 카톡방이나 운영진에게 문의해주세요.');
-    
+
     if (!guestForm.name) return;
     setLoading(true);
-    
-    const newGuestPayload = {
-      name: guestForm.name,
-      gender: guestForm.gender, 
-      group: '게스트',
-      stars_type: guestForm.inviter || null, 
-      level: guestForm.level,
-      balance: guestForm.level, passing: guestForm.level, dribble: guestForm.level,
-      shooting: guestForm.level, touch: guestForm.level, stamina: guestForm.level
-    };
 
-    const { data, error } = await supabase.from('players').insert([newGuestPayload]).select();
-    if (!error && data && data.length > 0) {
-      const insertRecord = { date: selectedDate, player_id: data[0].id, team: 0, goals: 0, assists: 0, party_attendance: false };
-      const { error: recordError } = await supabase.from('match_records').insert([insertRecord]);
-      
-      if (recordError) {
-         alert('게스트 명단은 추가되었으나 투표 저장 권한이 없습니다.');
-      } else {
-         alert('게스트가 추가되고 오늘 경기에 자동 참석 처리되었습니다!');
-         await supabase.from('vote_logs').insert([{ match_date: selectedDate, player_name: guestForm.name, action: '게스트 투표(경기)' }]);
-      }
-      
-      setShowGuestModal(false);
-      setGuestForm({ name: '', gender: '남성', inviter: '', level: 5 });
-      fetchData();
+    // 1. 기존 DB에 똑같은 이름의 게스트가 있는지 먼저 검색합니다!
+    const { data: existingGuests, error: searchError } = await supabase
+      .from('players')
+      .select('*')
+      .eq('group', '게스트')
+      .eq('name', guestForm.name);
+
+    let guestId = null;
+
+    if (existingGuests && existingGuests.length > 0) {
+      // 2. 이미 왔던 단골 게스트라면? -> 기존 ID를 재사용하고, 날짜 꼬리표만 '오늘'로 갱신!
+      guestId = existingGuests[0].id;
+      await supabase
+        .from('players')
+        .update({ 
+          payment_date: selectedDate, // 꼬리표를 오늘 날짜로 바꿔서 투표창에 나타나게 함
+          stars_type: guestForm.inviter || existingGuests[0].stars_type // 초대자 갱신
+        }) 
+        .eq('id', guestId);
     } else {
-      setLoading(false);
-      alert('추가 실패');
+      // 3. 완전 처음 온 게스트라면? -> 새로 DB에 생성 (기존 방식)
+      const newGuestPayload = {
+        name: guestForm.name,
+        gender: guestForm.gender, 
+        group: '게스트',
+        stars_type: guestForm.inviter || null, 
+        payment_date: selectedDate, // 오늘 날짜 꼬리표 달기
+        level: guestForm.level,
+        balance: guestForm.level, passing: guestForm.level, dribble: guestForm.level,
+        shooting: guestForm.level, touch: guestForm.level, stamina: guestForm.level
+      };
+
+      const { data: newGuestData, error: insertError } = await supabase.from('players').insert([newGuestPayload]).select();
+      if (insertError || !newGuestData) {
+        setLoading(false);
+        return alert('게스트 추가에 실패했습니다.');
+      }
+      guestId = newGuestData[0].id;
     }
+
+    // 4. 최종적으로 찾아낸(또는 생성한) 게스트 ID를 오늘 경기 투표 명단에 쏙 넣기
+    const insertRecord = { date: selectedDate, player_id: guestId, team: 0, goals: 0, assists: 0, party_attendance: false };
+    const { error: recordError } = await supabase.from('match_records').insert([insertRecord]);
+    
+    if (recordError) {
+       alert('게스트 명단은 확인되었으나 투표 저장 권한이 없습니다.');
+    } else {
+       alert('게스트가 성공적으로 오늘 투표 명단에 올라갔습니다!');
+       await supabase.from('vote_logs').insert([{ match_date: selectedDate, player_name: guestForm.name, action: '게스트 투표(경기)' }]);
+    }
+    
+    setShowGuestModal(false);
+    setGuestForm({ name: '', gender: '남성', inviter: '', level: 5 });
+    fetchData();
   };
 
   const handleClearGuests = async () => {
@@ -931,7 +958,8 @@ export default function FutsalCloudApp() {
   const sortedPlayersForVote = useMemo(() => {
     // 1. 일반/스타즈 회원을 가나다순으로 정렬
     const regulars = players.filter(p => p.group !== '게스트').sort((a, b) => a.name.localeCompare(b.name));
-    const guests = players.filter(p => p.group === '게스트');
+    // ✨ [수정됨] 무수히 많은 게스트 중, '현재 보고 있는 경기 날짜' 꼬리표를 단 게스트만 데려옵니다!
+    const guests = players.filter(p => p.group === '게스트' && p.payment_date === selectedDate);
 
     const result = [];
     const unassignedGuests = [...guests];
