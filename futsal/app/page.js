@@ -486,6 +486,9 @@ export default function FutsalCloudApp() {
   };
 
   const handleToggleAttendance = async (pid) => {
+    const isVoteClosed = new Date() > new Date(`${deadlineDate}T${deadlineTime}:00`);
+    if (isVoteClosed && !isAdmin) return alert('⏰ 투표 시간이 마감되었습니다!\n지각이나 불참 등 변동 사항은 카톡방이나 운영진에게 문의해주세요.');
+    
     const isAttending = tempAttendance.includes(pid);
     const playerInfo = players.find(p => p.id === pid);
     const playerName = playerInfo ? playerInfo.name : '알수없음';
@@ -520,6 +523,9 @@ export default function FutsalCloudApp() {
   };
 
   const handleToggleParty = async (pid) => {
+    const isVoteClosed = new Date() > new Date(`${deadlineDate}T${deadlineTime}:00`);
+    if (isVoteClosed && !isAdmin) return alert('⏰ 투표 시간이 마감되었습니다!\n지각이나 불참 등 변동 사항은 카톡방이나 운영진에게 문의해주세요.');
+    
     const isMatchAttending = tempAttendance.includes(pid);
     if (!isMatchAttending) return alert('경기 투표를 먼저 완료해주세요!');
 
@@ -554,6 +560,9 @@ export default function FutsalCloudApp() {
 
   // --- [추가됨] 뒷풀이 전용 게스트 추가/삭제 함수 ---
   const handleAddPartyGuest = async () => {
+    const isVoteClosed = new Date() > new Date(`${deadlineDate}T${deadlineTime}:00`);
+    if (isVoteClosed && !isAdmin) return alert('⏰ 투표 시간이 마감되었습니다!\n지각이나 불참 등 변동 사항은 카톡방이나 운영진에게 문의해주세요.');
+    
     if (!partyGuestInput.trim()) return;
     const currentGuests = partyGuestsText ? partyGuestsText.split(',').filter(Boolean) : [];
     currentGuests.push(partyGuestInput.trim());
@@ -588,6 +597,9 @@ export default function FutsalCloudApp() {
 
   const handleAddGuest = async (e) => {
     e.preventDefault();
+    const isVoteClosed = new Date() > new Date(`${deadlineDate}T${deadlineTime}:00`);
+    if (isVoteClosed && !isAdmin) return alert('⏰ 투표 시간이 마감되었습니다!\n지각이나 불참 등 변동 사항은 카톡방이나 운영진에게 문의해주세요.');
+    
     if (!guestForm.name) return;
     setLoading(true);
     
