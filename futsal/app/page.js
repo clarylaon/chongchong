@@ -927,6 +927,35 @@ export default function FutsalCloudApp() {
     if (!error) { alert('이동되었습니다.'); setMovePlayerTarget(null); fetchData(); }
   };
 
+  // --- [추가됨] 투표 화면 전용 정렬 로직 (가나다순 + 게스트 꼬리물기) ---
+  const sortedPlayersForVote = useMemo(() => {
+    // 1. 일반/스타즈 회원을 가나다순으로 정렬
+    const regulars = players.filter(p => p.group !== '게스트').sort((a, b) => a.name.localeCompare(b.name));
+    const guests = players.filter(p => p.group === '게스트');
+
+    const result = [];
+    const unassignedGuests = [...guests];
+
+    // 2. 정식 회원 뒤에 본인이 초대한 게스트를 가나다순으로 끼워넣기
+    regulars.forEach(reg => {
+      result.push(reg);
+      const myGuests = guests.filter(g => g.stars_type === reg.name).sort((a, b) => a.name.localeCompare(b.name));
+      result.push(...myGuests);
+      
+      // 배정된 게스트는 미배정 명단에서 제거
+      myGuests.forEach(mg => {
+        const idx = unassignedGuests.findIndex(ug => ug.id === mg.id);
+        if (idx > -1) unassignedGuests.splice(idx, 1);
+      });
+    });
+
+    // 3. 초대자를 못 찾은(오류 등) 나머지 게스트들을 맨 뒤에 가나다순으로 배치
+    unassignedGuests.sort((a, b) => a.name.localeCompare(b.name));
+    result.push(...unassignedGuests);
+
+    return result;
+  }, [players]);
+
   const processedPlayers = useMemo(() => {
     let data = [...players];
     data = data.map(p => ({
@@ -1451,7 +1480,7 @@ export default function FutsalCloudApp() {
               {['남성','여성'].map(gender => (
                 <Card key={gender} title={gender}>
                   <div className="space-y-2">
-                  {players.filter(p=>p.gender===gender).map(p => {
+                  {sortedPlayersForVote.filter(p=>p.gender===gender).map(p => {
                     const isChecked = tempAttendance.includes(p.id);
                     return (
                       <div key={p.id} onClick={()=>handleToggleAttendance(p.id)} 
@@ -1932,7 +1961,7 @@ export default function FutsalCloudApp() {
                     
                     {/* [수정됨] 애니메이션 적용된 2줄 레이아웃 */}
                     <div className="grid grid-cols-2 gap-2">
-                      {players.filter(p=>p.gender===gender).map(p => {
+                      {sortedPlayersForVote.filter(p=>p.gender===gender).map(p => {
                         const isChecked = tempAttendance.includes(p.id);
                         const isPartyChecked = records.find(r => r.player_id === p.id && r.date === selectedDate)?.party_attendance;
                         
