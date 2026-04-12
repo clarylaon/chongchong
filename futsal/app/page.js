@@ -438,13 +438,15 @@ export default function FutsalCloudApp() {
 
   const allTimePlayersArray = useMemo(() => Object.values(playerStats).filter(p => p.group !== '게스트'), [playerStats]);
 
-  const previousGameMVPs = useMemo(() => {
-    const uniqueDates = [...new Set(records.map(r => r.date))].sort();
-    const today = new Date().toISOString().split('T')[0];
-    const pastDates = uniqueDates.filter(d => d < today); 
+    const previousGameMVPs = useMemo(() => {
+    // 1. 일정(schedules) 중에서 is_completed가 true(종료됨)인 경기들만 모아서 날짜순 정렬
+    const completedMatches = schedules.filter(s => s.is_completed).sort((a, b) => a.date.localeCompare(b.date));
     
-    if (pastDates.length === 0) return null;
-    const prevDate = pastDates[pastDates.length - 1];
+    // 종료된 경기가 없으면 null 반환
+    if (completedMatches.length === 0) return null;
+    
+    // 가장 최근에 종료된 경기 날짜 가져오기 (방금 종료 버튼을 누른 오늘 경기!)
+    const prevDate = completedMatches[completedMatches.length - 1].date;
     
     const prevRecords = records.filter(r => r.date === prevDate);
     const playersWithStats = prevRecords.map(r => {
@@ -462,12 +464,14 @@ export default function FutsalCloudApp() {
       topScorer: topScorers[0],
       topAssist: topAssists[0]
     };
-  }, [records, playerStats]);
+  }, [records, playerStats, schedules]);
 
   const upcomingSchedules = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
-    return schedules.filter(s => s.date >= todayStr);
+    // ✨ [핵심] is_completed가 true로 바뀌면, 투표 진행 중인 다가오는 경기 목록에서 스르륵 사라집니다!
+    return schedules.filter(s => s.date >= todayStr && !s.is_completed);
   }, [schedules]);
+
   
   const upcomingMatch = upcomingSchedules.length > 0 ? upcomingSchedules[0] : null;
   const nextUpcomingMatch = upcomingSchedules.length > 1 ? upcomingSchedules[1] : null;
@@ -942,6 +946,23 @@ export default function FutsalCloudApp() {
     alert('팀 배정 완료!'); 
     fetchData();
   };
+
+    // --- [추가됨] 경기 종료 및 MVP 박제 함수 ---
+  const handleCompleteMatch = async () => {
+    if (!window.confirm('기록 입력을 마치고 경기를 종료하시겠습니까?\n종료 시 홈 화면 메인에 오늘의 MVP가 즉시 공개됩니다! 🏆')) return;
+    
+    const { error } = await supabase.from('match_schedules')
+      .update({ is_completed: true })
+      .eq('date', selectedDate);
+      
+    if (!error) {
+      alert('경기가 멋지게 종료되었습니다! 홈 화면에서 MVP를 확인하세요.');
+      fetchData(); // 데이터 새로고침
+    } else {
+      alert('경기 종료 처리 중 오류가 발생했습니다.');
+    }
+  };
+
 
   const updateStat = async (pid, field, value) => {
     if (value < 0) return; 
@@ -1544,6 +1565,10 @@ export default function FutsalCloudApp() {
                    </div>
                    <button onClick={generateTeams} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold shadow hover:bg-blue-700 flex items-center gap-1">
                      <RefreshCw size={14}/> 팀 자동 배정 (패키지 고려)
+                   <button onClick={handleCompleteMatch} className="bg-red-600 text-white px-4 py-2 rounded text-sm font-bold shadow hover:bg-red-700 flex items-center gap-1">
+                     <Trophy size={14}/> 경기 종료 (MVP 홈 화면 공개)
+                   </button>
+
                    </button>
                  </div>
                )}
