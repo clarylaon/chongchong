@@ -237,6 +237,13 @@ export default function FutsalCloudApp() {
   const [deadlineDate, setDeadlineDate] = useState(new Date().toISOString().split('T')[0]);
   const [deadlineTime, setDeadlineTime] = useState('18:00');
   
+  // 날짜 자동 점프를 막기 위한 상태
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // 오늘 경기 MVP 상태
+  const [showMvpModal, setShowMvpModal] = useState(false);
+  const [todayMvps, setTodayMvps] = useState({ scorer: null, assister: null });
+
   // 뒷풀이 상태
   const [hasParty, setHasParty] = useState(false);
   const [partyLocation, setPartyLocation] = useState('');
@@ -380,10 +387,14 @@ export default function FutsalCloudApp() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // DB 일정을 바탕으로 다가오는 경기 기본값 세팅 및 뒷풀이 동기화
+  // DB 일정을 바탕으로 다가오는 경기 기본값 세팅 및 뒷풀이 동기화 (점프 방지 적용)
   useEffect(() => {
+    // 이미 초기화가 끝났거나 데이터가 없으면 무시합니다.
+    if (isInitialized || schedules.length === 0) return;
+
     const todayStr = new Date().toISOString().split('T')[0];
-    const upcoming = schedules.filter(s => s.date >= todayStr);
+    const upcoming = schedules.filter(s => s.date >= todayStr && !s.is_completed);
+    
     if (upcoming.length > 0) {
       setSelectedDate(upcoming[0].date);
       setMatchTimeStart(upcoming[0].start_time || '20:00');
@@ -392,9 +403,10 @@ export default function FutsalCloudApp() {
       setDeadlineTime(upcoming[0].deadline_time || '18:00');
       setHasParty(upcoming[0].has_party || false);
       setPartyLocation(upcoming[0].party_location || '');
-      setPartyGuestsText(upcoming[0].party_guests || ''); // 추가됨
+      setPartyGuestsText(upcoming[0].party_guests || ''); 
+      setIsInitialized(true); // 자동 날짜 점프 방지 플래그 켜기
     }
-  }, [schedules]);
+  }, [schedules, isInitialized]);
 
   useEffect(() => {
     const currentDayIds = records.filter(r => r.date === selectedDate).map(r => r.player_id);
@@ -411,7 +423,7 @@ export default function FutsalCloudApp() {
       deadline_time: deadlineTime,
       has_party: hasParty,
       party_location: partyLocation,
-      party_guests: partyGuestsText // 추가됨
+      party_guests: partyGuestsText
     });
     if (!error) {
       alert(`${selectedDate} 경기 및 뒷풀이 일정이 등록되었습니다!`);
@@ -438,14 +450,14 @@ export default function FutsalCloudApp() {
 
   const allTimePlayersArray = useMemo(() => Object.values(playerStats).filter(p => p.group !== '게스트'), [playerStats]);
 
-    const previousGameMVPs = useMemo(() => {
+  const previousGameMVPs = useMemo(() => {
     // 1. 일정(schedules) 중에서 is_completed가 true(종료됨)인 경기들만 모아서 날짜순 정렬
     const completedMatches = schedules.filter(s => s.is_completed).sort((a, b) => a.date.localeCompare(b.date));
     
     // 종료된 경기가 없으면 null 반환
     if (completedMatches.length === 0) return null;
     
-    // 가장 최근에 종료된 경기 날짜 가져오기 (방금 종료 버튼을 누른 오늘 경기!)
+    // 가장 최근에 종료된 경기 날짜 가져오기
     const prevDate = completedMatches[completedMatches.length - 1].date;
     
     const prevRecords = records.filter(r => r.date === prevDate);
@@ -468,7 +480,6 @@ export default function FutsalCloudApp() {
 
   const upcomingSchedules = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
-    // ✨ [핵심] is_completed가 true로 바뀌면, 투표 진행 중인 다가오는 경기 목록에서 스르륵 사라집니다!
     return schedules.filter(s => s.date >= todayStr && !s.is_completed);
   }, [schedules]);
 
@@ -947,7 +958,7 @@ export default function FutsalCloudApp() {
     fetchData();
   };
 
-    // --- [추가됨] 경기 종료 및 MVP 박제 함수 ---
+  // --- [추가됨] 경기 종료 및 MVP 박제 함수 ---
   const handleCompleteMatch = async () => {
     if (!window.confirm('기록 입력을 마치고 경기를 종료하시겠습니까?\n종료 시 홈 화면 메인에 오늘의 MVP가 즉시 공개됩니다! 🏆')) return;
     
@@ -961,6 +972,30 @@ export default function FutsalCloudApp() {
     } else {
       alert('경기 종료 처리 중 오류가 발생했습니다.');
     }
+  };
+
+  // --- [추가됨] 오늘 경기 MVP 계산 함수 (팝업용) ---
+  const handleShowTodayMVP = () => {
+    const currentRecords = records.filter(r => r.date === selectedDate);
+    if (currentRecords.length === 0) return alert('오늘 투표/참석 인원이 없습니다.');
+
+    const playerStats = currentRecords.map(r => {
+      const p = players.find(pl => pl.id === r.player_id) || { name: '알수없음' };
+      return { name: p.name, goals: r.goals || 0, assists: r.assists || 0 };
+    });
+
+    const topScorer = [...playerStats].sort((a, b) => b.goals - a.goals)[0];
+    const topAssist = [...playerStats].sort((a, b) => b.assists - a.assists)[0];
+
+    if (topScorer.goals === 0 && topAssist.assists === 0) {
+      return alert('아직 등록된 골이나 어시스트 기록이 없습니다! ⚽️ 기록을 먼저 입력해 주세요.');
+    }
+
+    setTodayMvps({
+      scorer: topScorer.goals > 0 ? topScorer : null,
+      assister: topAssist.assists > 0 ? topAssist : null
+    });
+    setShowMvpModal(true);
   };
 
 
@@ -977,33 +1012,31 @@ export default function FutsalCloudApp() {
 
   // --- [추가됨] 투표 화면 전용 정렬 로직 (가나다순 + 게스트 꼬리물기) ---
   const sortedPlayersForVote = useMemo(() => {
-    // 1. 일반/스타즈 회원을 가나다순으로 정렬
     const regulars = players.filter(p => p.group !== '게스트').sort((a, b) => a.name.localeCompare(b.name));
-    // ✨ [수정됨] 무수히 많은 게스트 중, '현재 보고 있는 경기 날짜' 꼬리표를 단 게스트만 데려옵니다!
-    const guests = players.filter(p => p.group === '게스트' && p.payment_date === selectedDate);
+    const guests = players.filter(p => 
+      p.group === '게스트' && 
+      (p.payment_date === selectedDate || records.some(r => r.player_id === p.id && r.date === selectedDate))
+    );
 
     const result = [];
     const unassignedGuests = [...guests];
 
-    // 2. 정식 회원 뒤에 본인이 초대한 게스트를 가나다순으로 끼워넣기
     regulars.forEach(reg => {
       result.push(reg);
       const myGuests = guests.filter(g => g.stars_type === reg.name).sort((a, b) => a.name.localeCompare(b.name));
       result.push(...myGuests);
       
-      // 배정된 게스트는 미배정 명단에서 제거
       myGuests.forEach(mg => {
         const idx = unassignedGuests.findIndex(ug => ug.id === mg.id);
         if (idx > -1) unassignedGuests.splice(idx, 1);
       });
     });
 
-    // 3. 초대자를 못 찾은(오류 등) 나머지 게스트들을 맨 뒤에 가나다순으로 배치
     unassignedGuests.sort((a, b) => a.name.localeCompare(b.name));
     result.push(...unassignedGuests);
 
     return result;
-  }, [players]);
+  }, [players, selectedDate, records]);
 
   const processedPlayers = useMemo(() => {
     let data = [...players];
@@ -1558,17 +1591,25 @@ export default function FutsalCloudApp() {
                </div>
                
                {isAdmin && (
-                 <div className="flex items-center gap-3">
+                 <div className="flex flex-wrap items-center gap-3">
                    <div className="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded">
                      <span className="font-bold text-sm">생성할 팀 수:</span>
                      <input type="number" value={teamCount} onChange={e=>setTeamCount(e.target.value)} className="border p-1 w-12 text-center rounded bg-white"/>
                    </div>
+                   
+                   {/* 팀 배정 버튼 */}
                    <button onClick={generateTeams} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold shadow hover:bg-blue-700 flex items-center gap-1">
-                     <RefreshCw size={14}/> 팀 자동 배정 (패키지 고려)
-                   <button onClick={handleCompleteMatch} className="bg-red-600 text-white px-4 py-2 rounded text-sm font-bold shadow hover:bg-red-700 flex items-center gap-1">
-                     <Trophy size={14}/> 경기 종료 (MVP 홈 화면 공개)
+                     <RefreshCw size={14}/> 팀 자동 배정
+                   </button>
+                   
+                   {/* MVP 모달 보기 버튼 */}
+                   <button onClick={handleShowTodayMVP} className="bg-yellow-400 text-yellow-900 px-4 py-2 rounded text-sm font-bold shadow hover:bg-yellow-500 flex items-center gap-1">
+                     <Trophy size={16}/> 오늘 경기 MVP 보기 🏆
                    </button>
 
+                   {/* 경기 종료 버튼 */}
+                   <button onClick={handleCompleteMatch} className="bg-white text-red-600 border-2 border-red-600 px-4 py-2 rounded text-sm font-black shadow-sm hover:bg-red-50 flex items-center gap-1">
+                     <Trophy size={14}/> 모든 기록 마감 및 경기 종료
                    </button>
                  </div>
                )}
@@ -2202,6 +2243,46 @@ export default function FutsalCloudApp() {
           </div>
         </div>
       )}
+
+      {/* --- 오늘 경기 MVP 발표 팝업창 --- */}
+      {showMvpModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col border-4 border-yellow-400">
+            <div className="bg-yellow-400 text-yellow-900 p-5 flex justify-between items-center shrink-0">
+              <h2 className="text-xl font-black flex items-center gap-2"><Trophy size={24} className="fill-current"/> {selectedDate} 오늘의 MVP</h2>
+              <button onClick={() => setShowMvpModal(false)}><X size={24} /></button>
+            </div>
+            
+            <div className="p-8 text-center space-y-6 bg-gradient-to-b from-yellow-50 to-white">
+              
+              {todayMvps.scorer && (
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-yellow-200">
+                  <p className="text-sm font-bold text-gray-500 mb-1">🔥 오늘의 득점왕</p>
+                  <p className="text-3xl font-black text-blue-700 mb-1">{todayMvps.scorer.name}</p>
+                  <p className="text-lg font-bold text-gray-700">{todayMvps.scorer.goals} GOALS ⚽️</p>
+                </div>
+              )}
+
+              {todayMvps.assister && (
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-yellow-200">
+                  <p className="text-sm font-bold text-gray-500 mb-1">👟 오늘의 도움왕</p>
+                  <p className="text-3xl font-black text-green-700 mb-1">{todayMvps.assister.name}</p>
+                  <p className="text-lg font-bold text-gray-700">{todayMvps.assister.assists} ASSISTS 🤝</p>
+                </div>
+              )}
+
+              <p className="text-xs text-gray-400 mt-4 font-bold">* 이 화면을 캡처해서 단톡방에 공유해보세요! 📸</p>
+            </div>
+
+            <div className="p-4 bg-gray-50 border-t shrink-0">
+              <button onClick={() => setShowMvpModal(false)} className="w-full bg-gray-800 text-white py-3 rounded-xl font-bold text-lg hover:bg-gray-900 shadow-md">
+                멋져요! (닫기)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
