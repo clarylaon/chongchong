@@ -278,34 +278,50 @@ export default function FutsalCloudApp() {
       // ⏱️ 타이머가 방금 0초가 된 순간!
       setIsTimerRunning(false);
       
-      // 📣 별도의 mp3 파일 없이 브라우저 기본 기능으로 휘슬 소리를 만듭니다.
+      // 📣 리얼한 스포츠 호각 소리 만들기 (구슬 떨림 효과 추가)
       try {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         const ctx = new AudioContext();
         
-        // 휘슬 소리 만드는 함수
-        const playWhistle = (startTime, duration, startFreq, endFreq) => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.connect(gain);
-          gain.connect(ctx.destination);
+        const playRealWhistle = (startTime, duration) => {
+          // 호각 안의 '구슬'이 떨리는 소리를 위해 두 개의 주파수를 약간 어긋나게 겹칩니다.
+          const osc1 = ctx.createOscillator();
+          const osc2 = ctx.createOscillator();
+          const gainNode = ctx.createGain();
           
-          osc.type = 'square'; // 날카롭고 거친 소리 (호각 느낌)
-          osc.frequency.setValueAtTime(startFreq, startTime);
-          osc.frequency.exponentialRampToValueAtTime(endFreq, startTime + duration);
+          osc1.connect(gainNode);
+          osc2.connect(gainNode);
+          gainNode.connect(ctx.destination);
           
-          // 볼륨 설정 (시작할 땐 크고 끝날 땐 줄어듦)
-          gain.gain.setValueAtTime(0.2, startTime); 
-          gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+          // 부드러우면서도 찌르는 호각 주파수 세팅 (Triangle & Sine 조합)
+          const baseFreq = 2600; // 실제 휘슬의 기본 주파수 대역
+          osc1.type = 'triangle';
+          osc2.type = 'sine';
           
-          osc.start(startTime);
-          osc.stop(startTime + duration);
+          // 숨을 '훅!' 불어넣는 느낌의 피치 벤드(음 높이가 살짝 올라감)
+          osc1.frequency.setValueAtTime(baseFreq - 300, startTime);
+          osc1.frequency.linearRampToValueAtTime(baseFreq, startTime + 0.05);
+          
+          osc2.frequency.setValueAtTime(baseFreq - 300, startTime);
+          osc2.frequency.linearRampToValueAtTime(baseFreq + 50, startTime + 0.05); // 50Hz 차이로 진동(Trill) 생성
+          
+          // 볼륨 조절 (사람이 숨을 불고 끊는 느낌으로 부드럽게)
+          gainNode.gain.setValueAtTime(0, startTime);
+          gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.05); // 볼륨 서서히 커짐 (Attack)
+          gainNode.gain.setValueAtTime(0.3, startTime + duration - 0.05); // 유지 (Sustain)
+          gainNode.gain.linearRampToValueAtTime(0, startTime + duration); // 볼륨 서서히 작아짐 (Release)
+          
+          osc1.start(startTime);
+          osc2.start(startTime);
+          osc1.stop(startTime + duration);
+          osc2.stop(startTime + duration);
         };
 
         // 심판 종료 휘슬 패턴: 삑! 삑! 삐이이이익!!!
-        playWhistle(ctx.currentTime, 0.3, 2000, 2400);        // 첫 번째 짧게
-        playWhistle(ctx.currentTime + 0.5, 0.3, 2000, 2400);  // 두 번째 짧게
-        playWhistle(ctx.currentTime + 1.0, 1.5, 2000, 2800);  // 마지막 길고 높게~
+        const now = ctx.currentTime;
+        playRealWhistle(now, 0.2);           // 짧게 삑!
+        playRealWhistle(now + 0.3, 0.2);     // 짧게 삑!
+        playRealWhistle(now + 0.6, 1.2);     // 길게 삐이이이익!!!
         
       } catch (e) {
         console.error("오디오 재생을 지원하지 않는 브라우저입니다.", e);
