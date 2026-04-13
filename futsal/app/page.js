@@ -266,15 +266,52 @@ export default function FutsalCloudApp() {
   const [timerSeconds, setTimerSeconds] = useState(900); // 15분
   const [isTimerRunning, setIsTimerRunning] = useState(false);
 
+  // 타이머 작동 및 종료음(심판 휘슬) 재생 로직
   useEffect(() => {
     let interval = null;
+    
     if (isTimerRunning && timerSeconds > 0) {
       interval = setInterval(() => {
         setTimerSeconds(prev => prev - 1);
       }, 1000);
-    } else if (timerSeconds === 0) {
+    } else if (isTimerRunning && timerSeconds === 0) {
+      // ⏱️ 타이머가 방금 0초가 된 순간!
       setIsTimerRunning(false);
+      
+      // 📣 별도의 mp3 파일 없이 브라우저 기본 기능으로 휘슬 소리를 만듭니다.
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AudioContext();
+        
+        // 휘슬 소리 만드는 함수
+        const playWhistle = (startTime, duration, startFreq, endFreq) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          
+          osc.type = 'square'; // 날카롭고 거친 소리 (호각 느낌)
+          osc.frequency.setValueAtTime(startFreq, startTime);
+          osc.frequency.exponentialRampToValueAtTime(endFreq, startTime + duration);
+          
+          // 볼륨 설정 (시작할 땐 크고 끝날 땐 줄어듦)
+          gain.gain.setValueAtTime(0.2, startTime); 
+          gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+          
+          osc.start(startTime);
+          osc.stop(startTime + duration);
+        };
+
+        // 심판 종료 휘슬 패턴: 삑! 삑! 삐이이이익!!!
+        playWhistle(ctx.currentTime, 0.3, 2000, 2400);        // 첫 번째 짧게
+        playWhistle(ctx.currentTime + 0.5, 0.3, 2000, 2400);  // 두 번째 짧게
+        playWhistle(ctx.currentTime + 1.0, 1.5, 2000, 2800);  // 마지막 길고 높게~
+        
+      } catch (e) {
+        console.error("오디오 재생을 지원하지 않는 브라우저입니다.", e);
+      }
     }
+    
     return () => clearInterval(interval);
   }, [isTimerRunning, timerSeconds]);
 
