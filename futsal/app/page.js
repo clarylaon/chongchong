@@ -74,46 +74,40 @@ const DdayBadge = ({ dday }) => {
   return null;
 };
 
-// --- [추가됨] 선수 업적(뱃지) 계산 함수 ---
+// --- [추가됨] 업적(뱃지) 마스터 데이터 & 조건 정의 ---
+const BADGE_DEFINITIONS = [
+  { id: 'newbie', icon: '🌱', name: '새싹', desc: '출석 3회 이하 뉴비', check: (p, r, tg, ta, att) => att > 0 && att <= 3 },
+  { id: 'regular', icon: '👼', name: '단골손님', desc: '10경기 이상 출석', check: (p, r, tg, ta, att) => att >= 10 },
+  { id: 'ironman', icon: '🛡️', name: '철강왕', desc: '20경기 이상 출석', check: (p, r, tg, ta, att) => att >= 20 },
+  { id: 'hattrick', icon: '🔥', name: '해트트릭', desc: '한 경기 3골 이상 달성', check: (p, r, tg, ta, att) => r.some(record => record.goals >= 3) },
+  { id: 'delivery', icon: '🤝', name: '택배기사', desc: '한 경기 3어시 이상 달성', check: (p, r, tg, ta, att) => r.some(record => record.assists >= 3) },
+  { id: 'scorer', icon: '⚽', name: '골잡이', desc: '누적 10골 달성', check: (p, r, tg, ta, att) => tg >= 10 },
+  { id: 'legend', icon: '👑', name: '레전드', desc: '누적 30골 달성', check: (p, r, tg, ta, att) => tg >= 30 },
+  { id: 'maestro', icon: '🎯', name: '마에스트로', desc: '누적 15도움 달성', check: (p, r, tg, ta, att) => ta >= 15 },
+  { id: 'cannon', icon: '🚀', name: '캐논슈터', desc: '슈팅 스탯 8 이상', check: (p, r, tg, ta, att) => p.shooting >= 8 },
+  { id: 'cheetah', icon: '🐆', name: '치타', desc: '드리블 스탯 8 이상', check: (p, r, tg, ta, att) => p.dribble >= 8 },
+  { id: 'passmaster', icon: '🥏', name: '패스마스터', desc: '패스 스탯 8 이상', check: (p, r, tg, ta, att) => p.passing >= 8 },
+  { id: 'stamina', icon: '🫀', name: '두개의심장', desc: '체력 스탯 8 이상', check: (p, r, tg, ta, att) => p.stamina >= 8 },
+  { id: 'manner', icon: '😇', name: '매너왕', desc: '매너점수 120점 돌파', check: (p, r, tg, ta, att) => (p.manner_score || 100) >= 120 },
+  { id: 'warning', icon: '⚠️', name: '요주의', desc: '경고 1회 이상 누적', check: (p, r, tg, ta, att) => (p.yellow_cards || 0) >= 1 },
+];
+
 const getPlayerBadges = (player, records) => {
   if (!player) return [];
   const pRecords = records.filter(r => r.player_id === player.id);
-  const badges = [];
   const totalGoals = pRecords.reduce((s, r) => s + r.goals, 0);
   const totalAssists = pRecords.reduce((s, r) => s + r.assists, 0);
   const attendance = pRecords.length;
 
-  // 1. 출석 관련
-  if (attendance > 0 && attendance <= 3) badges.push({ icon: '🌱', name: '새싹', desc: '출석 3회 이하 뉴비' });
-  if (attendance >= 10) badges.push({ icon: '👼', name: '단골손님', desc: '10경기 이상 출석' });
-  if (attendance >= 20) badges.push({ icon: '🛡️', name: '철강왕', desc: '20경기 이상 출석' });
-
-  // 2. 기록 관련
-  if (pRecords.some(r => r.goals >= 3)) badges.push({ icon: '🔥', name: '해트트릭', desc: '한 경기 3골 이상 달성' });
-  if (pRecords.some(r => r.assists >= 3)) badges.push({ icon: '🤝', name: '택배기사', desc: '한 경기 3어시 이상 달성' });
-  if (totalGoals >= 10) badges.push({ icon: '⚽', name: '골잡이', desc: '누적 10골 달성' });
-  if (totalGoals >= 30) badges.push({ icon: '👑', name: '레전드', desc: '누적 30골 달성' });
-  if (totalAssists >= 15) badges.push({ icon: '🎯', name: '마에스트로', desc: '누적 15도움 달성' });
-
-  // 3. 스탯 관련
-  if (player.shooting >= 8) badges.push({ icon: '🚀', name: '캐논슈터', desc: '슈팅 스탯 8 이상' });
-  if (player.dribble >= 8) badges.push({ icon: '🐆', name: '치타', desc: '드리블 스탯 8 이상' });
-  if (player.passing >= 8) badges.push({ icon: '🥏', name: '패스마스터', desc: '패스 스탯 8 이상' });
-  if (player.stamina >= 8) badges.push({ icon: '🫀', name: '두개의심장', desc: '체력 스탯 8 이상' });
-
-  // 4. 매너 관련
-  if ((player.manner_score || 100) >= 120) badges.push({ icon: '😇', name: '매너왕', desc: '매너점수 120점 돌파' });
-  if ((player.yellow_cards || 0) >= 1) badges.push({ icon: '⚠️', name: '요주의', desc: '경고 1회 이상 누적' });
-
-  return badges;
+  return BADGE_DEFINITIONS.filter(b => b.check(player, pRecords, totalGoals, totalAssists, attendance));
 };
 
-const PlayerName = ({ player, records = [] }) => {
+const PlayerName = ({ player, records = [], hideBadge = false }) => {
   const isStar = player.group === '스타즈';
   const isGuest = player.group === '게스트';
   const dday = isStar ? getDday(player.expire_date) : null;
-  const badges = records.length > 0 ? getPlayerBadges(player, records) : [];
-  // 작은 아이콘으로 보여줄 핵심 뱃지 1개만 추출 (요주의 > 해트트릭 > 레전드 순)
+  const badges = (!hideBadge && records.length > 0) ? getPlayerBadges(player, records) : [];
+  // 작은 아이콘으로 보여줄 핵심 뱃지 1개만 추출
   const topBadge = badges.find(b => b.name === '요주의') || badges.find(b => b.name === '해트트릭') || badges.find(b => b.name === '레전드') || badges[0];
 
   return (
@@ -122,7 +116,7 @@ const PlayerName = ({ player, records = [] }) => {
       {isGuest && <span className="text-[10px] bg-green-500 text-white px-1.5 py-0.5 rounded-full shrink-0">G</span>}
       <span className={`whitespace-nowrap ${dday !== null && dday < 0 ? 'text-gray-400 line-through' : ''}`}>
         {player.name}
-        {topBadge && <span className="ml-1 text-sm" title={topBadge.desc}>{topBadge.icon}</span>}
+        {!hideBadge && topBadge && <span className="ml-1 text-sm" title={topBadge.desc}>{topBadge.icon}</span>}
         {isGuest && player.stars_type && (
           <span className="text-[10px] text-green-700 font-normal ml-1 bg-green-50 px-1 rounded border border-green-200 shrink-0">
             초대: {player.stars_type}
@@ -174,7 +168,6 @@ const PlayerDetailModal = ({ player, records, totalMatches, onClose }) => {
   const attendanceRate = totalMatches > 0 ? Math.round((attendanceCount / totalMatches) * 100) : 0;
   
   const dday = player.group === '스타즈' ? getDday(player.expire_date) : null;
-  const badges = getPlayerBadges(player, records);
   
   const chartData = [
     { subject: '밸런스', A: player.balance, fullMark: 10 },
@@ -189,27 +182,43 @@ const PlayerDetailModal = ({ player, records, totalMatches, onClose }) => {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[80] p-4">
       <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
         <div className="bg-blue-700 text-white p-4 flex justify-between items-center">
-          <h2 className="text-xl font-bold"><PlayerName player={player}/> 상세 정보</h2>
+          <h2 className="text-xl font-bold"><PlayerName player={player} hideBadge={true}/> 상세 정보</h2>
           <button onClick={onClose}><X size={24} /></button>
         </div>
         <div className="p-6 overflow-y-auto">
           <div className="flex flex-col md:flex-row gap-6">
             <div className="flex-1 flex flex-col items-center">
               
-              {/* --- [추가됨] 수집한 뱃지 리스트 --- */}
-              {badges.length > 0 && (
-                <div className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl mb-4">
-                  <p className="text-xs font-bold text-gray-500 mb-2 flex items-center gap-1">🎖️ 획득한 업적 도장</p>
-                  <div className="flex flex-wrap gap-2">
-                    {badges.map(b => (
-                      <div key={b.name} className="flex items-center gap-1.5 bg-white border border-gray-300 px-2 py-1 rounded-lg shadow-sm" title={b.desc}>
-                        <span className="text-base">{b.icon}</span>
-                        <span className="text-xs font-extrabold text-gray-700">{b.name}</span>
-                      </div>
-                    ))}
+              {/* --- 획득/미획득 업적 도감 --- */}
+              {(() => {
+                const earnedBadges = getPlayerBadges(player, records);
+                const earnedIds = earnedBadges.map(b => b.id);
+                const unearnedBadges = BADGE_DEFINITIONS.filter(b => !earnedIds.includes(b.id) && b.id !== 'warning' && b.id !== 'newbie');
+
+                return (
+                  <div className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl mb-4">
+                    <p className="text-xs font-bold text-gray-500 mb-2 flex items-center gap-1">🎖️ 획득한 업적 <span className="text-[10px] font-normal text-blue-500 cursor-pointer">(터치해서 조건 확인👆)</span></p>
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {earnedBadges.length > 0 ? earnedBadges.map(b => (
+                        <div key={b.name} onClick={() => alert(`[${b.icon} ${b.name}]\n\n✨ 획득 조건:\n${b.desc}`)} className="cursor-pointer flex items-center gap-1.5 bg-white border border-gray-300 px-2 py-1 rounded-lg shadow-sm hover:bg-gray-100 transition-colors">
+                          <span className="text-base">{b.icon}</span>
+                          <span className="text-xs font-extrabold text-gray-700">{b.name}</span>
+                        </div>
+                      )) : <span className="text-xs text-gray-400 font-bold ml-1">아직 획득한 업적이 없습니다.</span>}
+                    </div>
+
+                    <p className="text-xs font-bold text-gray-400 mb-2 flex items-center gap-1">🔒 달성 가능한 업적 (미획득)</p>
+                    <div className="flex flex-wrap gap-2">
+                      {unearnedBadges.map(b => (
+                        <div key={b.name} onClick={() => alert(`[🔒 미획득 업적]\n\n${b.icon} ${b.name} 뱃지를 얻으려면?\n👉 ${b.desc}`)} className="cursor-pointer flex items-center gap-1.5 bg-gray-200 border border-gray-300 px-2 py-1 rounded-lg opacity-50 hover:opacity-100 hover:bg-gray-300 transition-all">
+                          <span className="text-base grayscale">{b.icon}</span>
+                          <span className="text-xs font-bold text-gray-500">{b.name}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               <div className="w-full h-64 relative">
                 <ResponsiveContainer width="100%" height="100%">
@@ -311,8 +320,7 @@ export default function FutsalCloudApp() {
   const [timerSeconds, setTimerSeconds] = useState(900); // 15분
   const [isTimerRunning, setIsTimerRunning] = useState(false);
 
-  // --- [추가됨] 미니 포메이션 보드 상태 ---
-  // 구조: { [teamNo]: { [playerId]: { x: 50, y: 50 } } }
+  // --- 미니 포메이션 보드 상태 ---
   const [formations, setFormations] = useState({});
 
   useEffect(() => {
@@ -655,7 +663,7 @@ export default function FutsalCloudApp() {
         stars_type: guestForm.inviter || null, payment_date: selectedDate,
         level: guestForm.level, balance: guestForm.level, passing: guestForm.level, dribble: guestForm.level,
         shooting: guestForm.level, touch: guestForm.level, stamina: guestForm.level,
-        manner_score: 100, yellow_cards: 0 // 디폴트 값 
+        manner_score: 100, yellow_cards: 0
       };
       const { data: newGuestData } = await supabase.from('players').insert([newGuestPayload]).select();
       if (newGuestData) guestId = newGuestData[0].id;
@@ -679,7 +687,7 @@ export default function FutsalCloudApp() {
     if (!error) { alert('게스트가 일괄 삭제되었습니다.'); fetchData(); }
   };
 
-  // --- [추가됨] 매너 점수 & 옐로카드 핸들러 ---
+  // --- 매너 점수 & 옐로카드 핸들러 ---
   const handleManner = async (pid, amount) => {
     const player = players.find(p => p.id === pid);
     const newScore = (player.manner_score || 100) + amount;
@@ -696,7 +704,7 @@ export default function FutsalCloudApp() {
     if (!error) { alert(`${player.name} 선수에게 옐로카드가 부여되었습니다!`); fetchData(); }
   };
 
-  // --- [추가됨] 포메이션 보드 드래그 앤 드롭 함수 ---
+  // --- 포메이션 보드 드래그 앤 드롭 함수 ---
   const handleDragStart = (e, playerId, teamNo) => {
     e.dataTransfer.setData('playerId', playerId);
     e.dataTransfer.setData('teamNo', teamNo);
@@ -704,7 +712,7 @@ export default function FutsalCloudApp() {
   const handleDrop = (e, teamNo) => {
     const playerId = e.dataTransfer.getData('playerId');
     const sourceTeam = e.dataTransfer.getData('teamNo');
-    if (sourceTeam != teamNo) return; // 본인 팀 전술판에만 놓을 수 있음
+    if (sourceTeam != teamNo) return; 
     
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
@@ -714,7 +722,6 @@ export default function FutsalCloudApp() {
       ...prev, [teamNo]: { ...(prev[teamNo] || {}), [playerId]: { x, y } }
     }));
   };
-
 
   const openStarsModal = (target, prevGroup) => {
     setStarsModalConfig({ isOpen: true, target, previousGroup: prevGroup });
@@ -921,7 +928,7 @@ export default function FutsalCloudApp() {
     });
 
     await Promise.all(updatePromises);
-    setFormations({}); // 팀 섞으면 전술판 초기화
+    setFormations({}); 
     alert('팀 배정 완료!'); fetchData();
   };
 
@@ -1034,7 +1041,7 @@ export default function FutsalCloudApp() {
             <tr key={i} className="border-b">
               <td className="p-2 text-center text-gray-500">{i+1}</td>
               <td className="p-2 text-center justify-center flex items-center">
-                <PlayerName player={p} records={records}/>
+                <PlayerName player={p} hideBadge={true}/>
                 {i === 0 && <Crown size={16} className="ml-1 text-yellow-500 fill-yellow-400 shrink-0" />}
                 {i === 1 && <Crown size={16} className="ml-1 text-gray-400 fill-gray-300 shrink-0" />}
                 {i === 2 && <Crown size={16} className="ml-1 text-amber-700 fill-amber-600 shrink-0" />}
@@ -1368,7 +1375,7 @@ export default function FutsalCloudApp() {
                           </>
                         ) : (
                           <>
-                            <td className="p-3"><div className="flex flex-col items-center justify-center"><PlayerName player={p} records={records}/></div></td>
+                            <td className="p-3"><div className="flex flex-col items-center justify-center"><PlayerName player={p} records={records} hideBadge={true}/></div></td>
                             <td className="p-3"><span className={`px-2 py-1 rounded text-xs ${p.gender==='남성'?'bg-blue-100 text-blue-800':'bg-pink-100 text-pink-800'}`}>{p.gender}</span></td>
                             <td className="p-3 font-bold text-blue-600">{p.level}</td>
                             
@@ -1432,7 +1439,7 @@ export default function FutsalCloudApp() {
                     
                     return (
                       <tr key={p.id} className="border-b hover:bg-gray-50">
-                        <td className="p-3 font-medium"><PlayerName player={p} records={records}/></td>
+                        <td className="p-3 font-medium"><PlayerName player={p} records={records} hideBadge={true}/></td>
                         <td className="p-3"><span className={`px-2 py-1 rounded text-xs font-bold ${isStar ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'}`}>{p.group || '일반'}</span></td>
                         <td className="p-3 text-gray-600">{p.stars_type || '-'}</td>
                         <td className="p-3 font-bold text-red-600">{p.expire_date || '-'}</td>
@@ -1576,7 +1583,7 @@ export default function FutsalCloudApp() {
                     const isAssigned = p.record.team > 0;
                     return (
                       <div key={p.id} className={`px-3 py-1 rounded border text-sm font-bold flex items-center gap-2 ${isAssigned ? 'bg-gray-100 text-gray-500' : 'bg-blue-50 text-blue-700 border-blue-300'}`}>
-                         <PlayerName player={p} records={records}/>
+                         <PlayerName player={p} records={records} hideBadge={true}/>
                          <span className="text-xs bg-white px-1 rounded border ml-1">Lv.{p.level}</span>
                          {isAssigned && <span className="text-xs text-green-600 ml-1">→ 팀{p.record.team}</span>}
                       </div>
@@ -1649,7 +1656,7 @@ export default function FutsalCloudApp() {
                                 <div className="flex justify-between items-center">
                                   <span className="font-bold flex items-center gap-1 text-sm md:text-base">
                                     <span className={`w-2 h-2 rounded-full shrink-0 ${p.gender==='남성'?'bg-blue-500':'bg-pink-500'}`}></span>
-                                    <PlayerName player={p} records={records}/>
+                                    <PlayerName player={p} records={records} hideBadge={true}/>
                                     <span className="text-xs text-gray-400 font-normal shrink-0 ml-1">({p.level})</span>
                                   </span>
                                   
@@ -1988,7 +1995,7 @@ export default function FutsalCloudApp() {
                         return (
                           <div key={p.id} className="flex items-stretch h-[44px]">
                             <div onClick={()=>handleToggleAttendance(p.id)} className={`flex-1 min-w-0 px-2 flex justify-between items-center rounded border cursor-pointer transition-all duration-300 ease-in-out ${isChecked ? 'bg-blue-50 border-blue-500 shadow-sm ring-1 ring-blue-500' : 'bg-white hover:bg-gray-50'}`}>
-                              <div className="truncate pr-1"><PlayerName player={p} records={records}/></div>
+                              <div className="truncate pr-1"><PlayerName player={p} records={records} hideBadge={true}/></div>
                               <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors ${isChecked?'bg-blue-600 border-blue-600':'border-gray-300'}`}>{isChecked && <UserCheck size={10} className="text-white"/>}</div>
                             </div>
                             {hasParty && (
