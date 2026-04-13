@@ -1205,9 +1205,15 @@ export default function FutsalCloudApp() {
             )}
 
             <div className="p-6 bg-white rounded-2xl shadow-md border-2 border-blue-500 relative overflow-hidden">
-              <div className="absolute top-0 right-0 bg-red-500 text-white px-3 py-1 rounded-bl-lg font-bold text-xs shadow-sm">
-                투표 진행 중
-              </div>
+              {upcomingMatch && (() => {
+                // 현재 시간과 마감 시간을 비교합니다.
+                const isVoteClosed = new Date() > new Date(`${upcomingMatch.deadline_date}T${upcomingMatch.deadline_time}:00`);
+                return (
+                  <div className={`absolute top-0 right-0 text-white px-3 py-1 rounded-bl-lg font-bold text-xs shadow-sm transition-colors ${isVoteClosed ? 'bg-gray-500' : 'bg-red-500'}`}>
+                    {isVoteClosed ? '투표 마감됨' : '투표 진행 중'}
+                  </div>
+                );
+              })()}
               <h2 className="text-xl font-extrabold text-gray-800 mb-4">다가오는 경기</h2>
               
               {upcomingMatch ? (
