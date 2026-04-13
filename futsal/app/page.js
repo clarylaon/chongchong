@@ -76,6 +76,12 @@ const formatDateUI = (dateString, timeStr) => {
   return timeStr ? `${d} ${timeStr}` : d;
 };
 
+const formatTime = (totalSeconds) => {
+  const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+  const s = (totalSeconds % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+};
+
 const DdayBadge = ({ dday }) => {
   if (dday === null) return null;
   if (dday < 0) return <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded border border-red-300 font-bold ml-1 shrink-0">만료됨</span>;
@@ -237,7 +243,6 @@ export default function FutsalCloudApp() {
   const [deadlineDate, setDeadlineDate] = useState(new Date().toISOString().split('T')[0]);
   const [deadlineTime, setDeadlineTime] = useState('18:00');
   
-  // 날짜 자동 점프를 막기 위한 상태
   const [isInitialized, setIsInitialized] = useState(false);
 
   // 오늘 경기 MVP 상태
@@ -248,13 +253,31 @@ export default function FutsalCloudApp() {
   const [hasParty, setHasParty] = useState(false);
   const [partyLocation, setPartyLocation] = useState('');
   
-  // 뒷풀이 전용 명단 텍스트 상태
+  // 뒷풀이 전용 명단
   const [partyGuestsText, setPartyGuestsText] = useState('');
   const [partyGuestInput, setPartyGuestInput] = useState('');
   const [showPartyListModal, setShowPartyListModal] = useState(false);
 
   const [teamCount, setTeamCount] = useState(2);
   
+  // --- [추가됨] 전광판 및 타이머 상태 ---
+  const [scoreTeam1, setScoreTeam1] = useState(0);
+  const [scoreTeam2, setScoreTeam2] = useState(0);
+  const [timerSeconds, setTimerSeconds] = useState(900); // 15분
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+
+  useEffect(() => {
+    let interval = null;
+    if (isTimerRunning && timerSeconds > 0) {
+      interval = setInterval(() => {
+        setTimerSeconds(prev => prev - 1);
+      }, 1000);
+    } else if (timerSeconds === 0) {
+      setIsTimerRunning(false);
+    }
+    return () => clearInterval(interval);
+  }, [isTimerRunning, timerSeconds]);
+
   const defaultNewPlayer = { 
     name: '', gender: '남성', group: '일반', 
     stars_type: '연납형', payment_date: new Date().toISOString().split('T')[0], expire_date: '',
@@ -321,7 +344,6 @@ export default function FutsalCloudApp() {
     const match = formatKakaoDate(selectedDate);
     const dead = formatKakaoDate(deadlineDate);
     
-    // 뒷풀이 여부에 따라 추가될 안내 멘트 생성
     const partyText = hasParty 
       ? `\n\n🍻 뒷풀이 안내\n장소: ${partyLocation || '추후 공지'}\n* 링크에서 뒷풀이 참석 여부도 꼭 함께 체크해 주세요!\n(뒷풀이만 참석도 가능)` 
       : '';
@@ -387,9 +409,7 @@ export default function FutsalCloudApp() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // DB 일정을 바탕으로 다가오는 경기 기본값 세팅 및 뒷풀이 동기화 (점프 방지 적용)
   useEffect(() => {
-    // 이미 초기화가 끝났거나 데이터가 없으면 무시합니다.
     if (isInitialized || schedules.length === 0) return;
 
     const todayStr = new Date().toISOString().split('T')[0];
@@ -404,7 +424,7 @@ export default function FutsalCloudApp() {
       setHasParty(upcoming[0].has_party || false);
       setPartyLocation(upcoming[0].party_location || '');
       setPartyGuestsText(upcoming[0].party_guests || ''); 
-      setIsInitialized(true); // 자동 날짜 점프 방지 플래그 켜기
+      setIsInitialized(true); 
     }
   }, [schedules, isInitialized]);
 
@@ -451,13 +471,9 @@ export default function FutsalCloudApp() {
   const allTimePlayersArray = useMemo(() => Object.values(playerStats).filter(p => p.group !== '게스트'), [playerStats]);
 
   const previousGameMVPs = useMemo(() => {
-    // 1. 일정(schedules) 중에서 is_completed가 true(종료됨)인 경기들만 모아서 날짜순 정렬
     const completedMatches = schedules.filter(s => s.is_completed).sort((a, b) => a.date.localeCompare(b.date));
-    
-    // 종료된 경기가 없으면 null 반환
     if (completedMatches.length === 0) return null;
     
-    // 가장 최근에 종료된 경기 날짜 가져오기
     const prevDate = completedMatches[completedMatches.length - 1].date;
     
     const prevRecords = records.filter(r => r.date === prevDate);
@@ -483,7 +499,6 @@ export default function FutsalCloudApp() {
     return schedules.filter(s => s.date >= todayStr && !s.is_completed);
   }, [schedules]);
 
-  
   const upcomingMatch = upcomingSchedules.length > 0 ? upcomingSchedules[0] : null;
   const nextUpcomingMatch = upcomingSchedules.length > 1 ? upcomingSchedules[1] : null;
 
@@ -573,7 +588,6 @@ export default function FutsalCloudApp() {
     }
   };
 
-  // --- [추가됨] 뒷풀이 전용 게스트 추가/삭제 함수 ---
   const handleAddPartyGuest = async () => {
     const isVoteClosed = new Date() > new Date(`${deadlineDate}T${deadlineTime}:00`);
     if (isVoteClosed && !isAdmin) return alert('⏰ 투표 시간이 마감되었습니다!\n지각이나 불참 등 변동 사항은 카톡방이나 운영진에게 문의해주세요.');
@@ -613,14 +627,12 @@ export default function FutsalCloudApp() {
   const handleAddGuest = async (e) => {
     e.preventDefault();
     
-    // [방어막] 마감 시간 체크
     const isVoteClosed = new Date() > new Date(`${deadlineDate}T${deadlineTime}:00`);
     if (isVoteClosed && !isAdmin) return alert('⏰ 투표 시간이 마감되었습니다!\n지각이나 불참 등 변동 사항은 카톡방이나 운영진에게 문의해주세요.');
 
     if (!guestForm.name) return;
     setLoading(true);
 
-    // 1. 기존 DB에 똑같은 이름의 게스트가 있는지 먼저 검색합니다!
     const { data: existingGuests, error: searchError } = await supabase
       .from('players')
       .select('*')
@@ -630,23 +642,21 @@ export default function FutsalCloudApp() {
     let guestId = null;
 
     if (existingGuests && existingGuests.length > 0) {
-      // 2. 이미 왔던 단골 게스트라면? -> 기존 ID를 재사용하고, 날짜 꼬리표만 '오늘'로 갱신!
       guestId = existingGuests[0].id;
       await supabase
         .from('players')
         .update({ 
-          payment_date: selectedDate, // 꼬리표를 오늘 날짜로 바꿔서 투표창에 나타나게 함
-          stars_type: guestForm.inviter || existingGuests[0].stars_type // 초대자 갱신
+          payment_date: selectedDate, 
+          stars_type: guestForm.inviter || existingGuests[0].stars_type
         }) 
         .eq('id', guestId);
     } else {
-      // 3. 완전 처음 온 게스트라면? -> 새로 DB에 생성 (기존 방식)
       const newGuestPayload = {
         name: guestForm.name,
         gender: guestForm.gender, 
         group: '게스트',
         stars_type: guestForm.inviter || null, 
-        payment_date: selectedDate, // 오늘 날짜 꼬리표 달기
+        payment_date: selectedDate,
         level: guestForm.level,
         balance: guestForm.level, passing: guestForm.level, dribble: guestForm.level,
         shooting: guestForm.level, touch: guestForm.level, stamina: guestForm.level
@@ -660,7 +670,6 @@ export default function FutsalCloudApp() {
       guestId = newGuestData[0].id;
     }
 
-    // 4. 최종적으로 찾아낸(또는 생성한) 게스트 ID를 오늘 경기 투표 명단에 쏙 넣기
     const insertRecord = { date: selectedDate, player_id: guestId, team: 0, goals: 0, assists: 0, party_attendance: false };
     const { error: recordError } = await supabase.from('match_records').insert([insertRecord]);
     
@@ -940,7 +949,6 @@ export default function FutsalCloudApp() {
         teams[targetIdx].push(p);
     });
 
-    // --- [버그 수정된 부분] 오직 team 번호만 안전하게 업데이트 ---
     const updatePromises = [];
     teams.forEach((team, idx) => {
       team.forEach(p => { 
@@ -958,7 +966,6 @@ export default function FutsalCloudApp() {
     fetchData();
   };
 
-  // --- [추가됨] 경기 종료 및 MVP 박제 함수 ---
   const handleCompleteMatch = async () => {
     if (!window.confirm('기록 입력을 마치고 경기를 종료하시겠습니까?\n종료 시 홈 화면 메인에 오늘의 MVP가 즉시 공개됩니다! 🏆')) return;
     
@@ -968,13 +975,12 @@ export default function FutsalCloudApp() {
       
     if (!error) {
       alert('경기가 멋지게 종료되었습니다! 홈 화면에서 MVP를 확인하세요.');
-      fetchData(); // 데이터 새로고침
+      fetchData(); 
     } else {
       alert('경기 종료 처리 중 오류가 발생했습니다.');
     }
   };
 
-  // --- [추가됨] 오늘 경기 MVP 계산 함수 (팝업용) ---
   const handleShowTodayMVP = () => {
     const currentRecords = records.filter(r => r.date === selectedDate);
     if (currentRecords.length === 0) return alert('오늘 투표/참석 인원이 없습니다.');
@@ -1010,7 +1016,6 @@ export default function FutsalCloudApp() {
     if (!error) { alert('이동되었습니다.'); setMovePlayerTarget(null); fetchData(); }
   };
 
-  // --- [추가됨] 투표 화면 전용 정렬 로직 (가나다순 + 게스트 꼬리물기) ---
   const sortedPlayersForVote = useMemo(() => {
     const regulars = players.filter(p => p.group !== '게스트').sort((a, b) => a.name.localeCompare(b.name));
     const guests = players.filter(p => 
@@ -1173,6 +1178,7 @@ export default function FutsalCloudApp() {
       <nav className="flex bg-white border-b overflow-x-auto sticky top-12 sm:top-[60px] z-30">
         {[
           { id: 'dashboard', icon: Home, label: '홈' }, 
+          { id: 'live_board', icon: Clock, label: '전광판' },
           { id: 'players', icon: Users, label: '선수 목록' },
           isAdmin && { id: 'members', icon: Download, label: '회원 장부' }, 
           isAdmin && { id: 'attendance', icon: Calendar, label: '투표 관리' },
@@ -1206,7 +1212,6 @@ export default function FutsalCloudApp() {
 
             <div className="p-6 bg-white rounded-2xl shadow-md border-2 border-blue-500 relative overflow-hidden">
               {upcomingMatch && (() => {
-                // 현재 시간과 마감 시간을 비교합니다.
                 const isVoteClosed = new Date() > new Date(`${upcomingMatch.deadline_date}T${upcomingMatch.deadline_time}:00`);
                 return (
                   <div className={`absolute top-0 right-0 text-white px-3 py-1 rounded-bl-lg font-bold text-xs shadow-sm transition-colors ${isVoteClosed ? 'bg-gray-500' : 'bg-red-500'}`}>
@@ -1227,7 +1232,6 @@ export default function FutsalCloudApp() {
                     </p>
                   </div>
 
-                  {/* [수정됨] 메인 투표 박스 + 뒷풀이 통합 */}
                   <div className="p-4 bg-gray-50 rounded-xl mb-4 text-center border shadow-sm">
                     <p className="text-lg">🔥 현재 <strong className="text-blue-600 text-3xl mx-1">{tempAttendance.length}</strong>명 투표 완료</p>
                     
@@ -1246,7 +1250,6 @@ export default function FutsalCloudApp() {
                                 현재 <span className="font-bold text-purple-600 text-sm">{totalPartyCount}</span>명 참석 예정 
                                 {onlyPartyCount > 0 && ` (경기인원 ${matchPartyCount}명 + 뒷풀이만 ${onlyPartyCount}명)`}
                               </p>
-                              {/* 명단 보기 버튼 추가됨 */}
                               <button onClick={() => setShowPartyListModal(true)} className="mt-2 text-[11px] bg-purple-100 text-purple-700 px-3 py-1.5 rounded-full font-bold hover:bg-purple-200 transition-colors">
                                 👀 참석 명단 확인하기
                               </button>
@@ -1320,6 +1323,68 @@ export default function FutsalCloudApp() {
               </div>
             </div>
 
+          </div>
+        )}
+
+        {/* --- [새로 추가됨] 실전 전광판 탭 --- */}
+        {activeTab === 'live_board' && (
+          <div className="flex flex-col gap-6">
+            <div className="bg-gray-900 text-white p-6 rounded-3xl shadow-2xl border-4 border-gray-700 flex flex-col items-center relative overflow-hidden">
+              <p className="text-gray-400 font-bold mb-2">🔥 LIVE SCOREBOARD 🔥</p>
+              
+              {/* 타이머 영역 */}
+              <div className="text-[5rem] sm:text-[7rem] font-black leading-none tracking-tighter tabular-nums text-yellow-400 drop-shadow-[0_0_15px_rgba(250,204,21,0.5)] mb-4">
+                {formatTime(timerSeconds)}
+              </div>
+              
+              {/* 타이머 조작 버튼 (수동 설정) */}
+              <div className="flex flex-wrap justify-center gap-2 mb-8">
+                <button onClick={() => setTimerSeconds(prev => Math.max(0, prev - 60))} className="px-4 py-2 bg-gray-800 rounded-lg font-bold hover:bg-gray-700">-1분</button>
+                <button onClick={() => setTimerSeconds(prev => prev + 60)} className="px-4 py-2 bg-gray-800 rounded-lg font-bold hover:bg-gray-700">+1분</button>
+                <button onClick={() => setTimerSeconds(900)} className="px-4 py-2 bg-gray-800 rounded-lg font-bold hover:bg-gray-700 text-gray-400">15분 리셋</button>
+                
+                <div className="w-4"></div> {/* 간격 벌리기 */}
+                
+                <button onClick={() => setIsTimerRunning(!isTimerRunning)} 
+                        className={`px-8 py-2 rounded-lg font-black text-lg border-2 ${isTimerRunning ? 'bg-red-600 border-red-500 hover:bg-red-700 text-white' : 'bg-green-500 border-green-400 hover:bg-green-600 text-gray-900'}`}>
+                  {isTimerRunning ? '일시정지' : '타이머 시작'}
+                </button>
+              </div>
+
+              {/* 스코어 영역 */}
+              <div className="w-full flex justify-between items-center px-4 sm:px-10">
+                {/* 1팀 점수 */}
+                <div className="flex flex-col items-center">
+                  <span className="text-xl sm:text-2xl font-bold mb-2 text-blue-400">TEAM 1</span>
+                  <div className="text-[6rem] sm:text-[8rem] font-black leading-none mb-4">{scoreTeam1}</div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setScoreTeam1(Math.max(0, scoreTeam1 - 1))} className="w-12 h-12 bg-gray-800 rounded-full font-bold text-xl hover:bg-gray-700">-</button>
+                    <button onClick={() => setScoreTeam1(scoreTeam1 + 1)} className="w-16 h-12 bg-blue-600 rounded-full font-black text-2xl hover:bg-blue-700 shadow-[0_0_15px_rgba(37,99,235,0.5)]">+</button>
+                  </div>
+                </div>
+
+                <div className="text-4xl font-black text-gray-600">VS</div>
+
+                {/* 2팀 점수 */}
+                <div className="flex flex-col items-center">
+                  <span className="text-xl sm:text-2xl font-bold mb-2 text-red-400">TEAM 2</span>
+                  <div className="text-[6rem] sm:text-[8rem] font-black leading-none mb-4">{scoreTeam2}</div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setScoreTeam2(Math.max(0, scoreTeam2 - 1))} className="w-12 h-12 bg-gray-800 rounded-full font-bold text-xl hover:bg-gray-700">-</button>
+                    <button onClick={() => setScoreTeam2(scoreTeam2 + 1)} className="w-16 h-12 bg-red-600 rounded-full font-black text-2xl hover:bg-red-700 shadow-[0_0_15px_rgba(220,38,38,0.5)]">+</button>
+                  </div>
+                </div>
+              </div>
+              
+              <button onClick={() => { if(window.confirm('점수를 0:0으로 초기화할까요?')) { setScoreTeam1(0); setScoreTeam2(0); } }} 
+                      className="mt-10 text-sm text-gray-500 hover:text-gray-300 underline">
+                스코어 리셋
+              </button>
+            </div>
+            
+            <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl text-blue-800 text-sm font-bold text-center shadow-sm">
+              💡 꿀팁: 구장에서 태블릿이나 스마트폰을 <b>가로로 눕혀두고</b> 사용하시면 완벽한 실전 전광판이 됩니다!
+            </div>
           </div>
         )}
 
@@ -1694,15 +1759,12 @@ export default function FutsalCloudApp() {
               </Card>
             )}
 
-            {/* [수정됨] DB에 저장된 실제 팀 개수에 맞춰서 화면에 자동으로 3팀, 4팀 다 그려주기 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {(() => {
-                // 1. DB에 저장된 오늘 경기 기록 중, 가장 숫자가 높은 팀 번호를 찾습니다.
                 const maxTeamInDB = records
                   .filter(r => r.date === selectedDate)
                   .reduce((max, r) => Math.max(max, r.team || 0), 0);
                 
-                // 2. 화면에 그려줄 팀 개수 (운영진 설정값과 DB 실제 팀 수 중 큰 값, 최소 2팀 보장)
                 const displayCount = Math.max(Number(teamCount) || 2, maxTeamInDB, 2);
 
                 return Array.from({ length: displayCount }).map((_, i) => {
@@ -2059,20 +2121,18 @@ export default function FutsalCloudApp() {
                   <div key={gender} className="space-y-2">
                     <div className="bg-gray-100 text-center font-bold py-1.5 rounded text-sm text-gray-700 shadow-sm border">{gender}</div>
                     
-                    {/* [수정됨] 애니메이션 적용된 2줄 레이아웃 */}
                     <div className="grid grid-cols-2 gap-2">
                       {sortedPlayersForVote.filter(p=>p.gender===gender).map(p => {
                         const isChecked = tempAttendance.includes(p.id);
                         const isPartyChecked = records.find(r => r.player_id === p.id && r.date === selectedDate)?.party_attendance;
                         
                         return (
-                          <div key={p.id} className="flex items-stretch h-[44px]"> {/* 버튼 높이 고정 */}
+                          <div key={p.id} className="flex items-stretch h-[44px]">
                             
-                            {/* 1. 이름 버튼: 맥주 버튼이 나오면 스르륵 폭이 줄어듦 */}
                             <div onClick={()=>handleToggleAttendance(p.id)}
                                  className={`flex-1 min-w-0 px-2 flex justify-between items-center rounded border cursor-pointer transition-all duration-300 ease-in-out ${isChecked ? 'bg-blue-50 border-blue-500 shadow-sm ring-1 ring-blue-500' : 'bg-white hover:bg-gray-50'}`}>
                               
-                              <div className="truncate pr-1"> {/* 좁아져도 이름이 안 깨지도록 처리 */}
+                              <div className="truncate pr-1">
                                 <PlayerName player={p}/>
                               </div>
                               
@@ -2081,7 +2141,6 @@ export default function FutsalCloudApp() {
                               </div>
                             </div>
                             
-                            {/* 2. 맥주 버튼: 평소엔 폭 0으로 숨어있다가 스르륵 나타남 */}
                             {hasParty && (
                               <div className={`overflow-hidden transition-all duration-300 ease-in-out flex items-stretch ${isChecked ? 'w-10 ml-1.5 opacity-100' : 'w-0 ml-0 opacity-0'}`}>
                                 <button onClick={(e) => { e.stopPropagation(); handleToggleParty(p.id); }}
@@ -2102,7 +2161,6 @@ export default function FutsalCloudApp() {
               </div>
             </div>
             
-            {/* [추가됨] 뒷풀이 전용 게스트 명단 영역 */}
             {hasParty && (
               <div className="p-4 border-t bg-purple-50 shrink-0">
                 <p className="text-sm font-bold text-purple-800 mb-2 flex items-center gap-1">
@@ -2177,19 +2235,17 @@ export default function FutsalCloudApp() {
 
       {/* --- 팀 이동 팝업 --- */}
       {movePlayerTarget && (() => {
-        // 실제 DB에 생성되어 있는 가장 높은 팀 번호를 찾습니다.
         const maxTeamInDB = records
           .filter(r => r.date === selectedDate)
           .reduce((max, r) => Math.max(max, r.team || 0), 0);
         
-        // 이동 가능한 팝업 버튼 개수 (운영진 입력값과 DB 실제 팀 수 중 큰 값을 사용)
         const actualTeamCount = Math.max(Number(teamCount) || 2, maxTeamInDB, 2);
 
         return (
           <MoveTeamModal
             player={movePlayerTarget.p}
             currentTeam={movePlayerTarget.teamNo}
-            teamCount={actualTeamCount} // 이제 3팀, 4팀 버튼이 정상적으로 뜹니다!
+            teamCount={actualTeamCount}
             onMove={handleMoveTeam}
             onClose={() => setMovePlayerTarget(null)}
           />
