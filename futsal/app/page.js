@@ -323,6 +323,34 @@ export default function FutsalCloudApp() {
   // --- 미니 포메이션 보드 상태 ---
   const [formations, setFormations] = useState({});
 
+  const wakeLockRef = React.useRef(null);
+    
+    useEffect(() => {
+      const requestWakeLock = async () => {
+        if (activeTab === 'live_board' && 'wakeLock' in navigator) {
+          try { wakeLockRef.current = await navigator.wakeLock.request('screen'); } 
+          catch (err) { console.log('화면 꺼짐 방지 미지원'); }
+        }
+      };
+      if (activeTab === 'live_board') requestWakeLock();
+      else if (wakeLockRef.current) { wakeLockRef.current.release().catch(() => {}); wakeLockRef.current = null; }
+      return () => { if (wakeLockRef.current) wakeLockRef.current.release().catch(() => {}); };
+    }, [activeTab]);
+
+    useEffect(() => {
+      let hiddenTime = null;
+      const handleVisibilityChange = () => {
+        if (document.hidden) hiddenTime = Date.now(); 
+        else if (hiddenTime && isTimerRunning) {
+          const passedSeconds = Math.floor((Date.now() - hiddenTime) / 1000);
+          setTimerSeconds(prev => { const newTime = prev - passedSeconds; return newTime > 0 ? newTime : 0; });
+          hiddenTime = null;
+        }
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, [isTimerRunning]);
+  
   useEffect(() => {
     let interval = null;
     if (isTimerRunning && timerSeconds > 0) {
