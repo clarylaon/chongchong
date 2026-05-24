@@ -480,7 +480,7 @@ export default function FutsalCloudApp() {
     if (window.Kakao && window.Kakao.isInitialized()) {
       const match = formatKakaoDate(selectedDate);
       const magicLinkUrl = `${window.location.origin}${window.location.pathname}`;
-      const text = `[🏁 총총 FC 당일 경기 안내‼️]\n\n안녕하세요 총총FC 여러분\n오늘 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n* 경기 10분전 도착하시어 환복해주시면 원활한 경기진행이 됩니다.\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층`;
+      const text = `[🏁 총총 FC 당일 경기 안내‼️]\n\n안녕하세요 총총FC 여러분\n오늘 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n* 경기 10분전 도착하시어 환복해주시면 원활한 경기진행이 됩니다.\n* 경기 시작 10분 후 부터 지각으로 간주되어 지각비가 발생하니 늦지 않게 와주시면 감사하겠습니다.\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층`;
       window.Kakao.Share.sendDefault({ objectType: 'text', text: text, link: { mobileWebUrl: magicLinkUrl, webUrl: magicLinkUrl }, buttonTitle: '웹사이트 확인하기' });
     } else { alert('카카오톡 기능을 불러오는 중입니다. 잠시 후 시도해주세요.'); }
   };
