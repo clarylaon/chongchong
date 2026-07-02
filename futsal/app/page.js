@@ -464,7 +464,7 @@ export default function FutsalCloudApp() {
     if (type === '게스트용') {
       return `[🏁 총총 FC 게스트초청데이‼️]\n\n안녕하세요 총총FC 여러분~\n${match.m}월 ${match.d}일 경기는 “게스트초청데이” 입니다\n우리 주변에 축구를 사랑하는 지인들을 초대하여 (축잘알,선출 환영) 총총FC를 홍보하고, 함께 뛰고 친목할 수 있는 시간을 가지려 합니다! 타대학/대학원 상관없이 초청가능하니 많은 참여 부탁드립니다\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n* 경기 10분전 도착하시어 환복해주시면 원활한 경기진행이 됩니다.\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층${partyText}\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n* 게스트: 10,000원\n\n🏦 참가비는 '79422633613 카카오뱅크'로 입금 부탁드립니다.\n\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n\n* 일반회원은 입금완료 시 참석 확정입니다!\n* 게스트 비용은 미리 입금해주시면 감사하겠습니다!`;
     }
-    return `[🏁 총총 FC 풋살 모임 투표 안내‼️]\n\n안녕하세요 총총FC 여러분\n${match.m}월 ${match.d}일 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층${partyText}\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n\n🏦 참가비는 '79422633613 카카오뱅크'로 입금 부탁드립니다.\n\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n* 일반회원은 입금완료 시 참석 확정입니다!`;
+    return `[🏁 총총 FC 풋살 모임 투표 안내‼️]\n\n안녕하세요 총총FC 여러분\n${match.m}월 ${match.d}일 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n\n⚽️ 구장위치\n강서염창 로꼬풋살스타디움\n서울특별시 강서구 양천로67길 63 염창동공장${partyText}\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n\n🏦 참가비는 '79422633613 카카오뱅크'로 입금 부탁드립니다.\n\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n* 일반회원은 입금완료 시 참석 확정입니다!`;
   };
 
   const executeKakaoShare = () => {
@@ -480,7 +480,7 @@ export default function FutsalCloudApp() {
     if (window.Kakao && window.Kakao.isInitialized()) {
       const match = formatKakaoDate(selectedDate);
       const magicLinkUrl = `${window.location.origin}${window.location.pathname}`;
-      const text = `[🏁 총총 FC 당일 경기 안내‼️]\n\n안녕하세요 총총FC 여러분\n오늘 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n* 경기 10분전 도착하시어 환복해주시면 원활한 경기진행이 됩니다.\n* 경기 시작 10분 후 부터 지각으로 간주되어 지각비가 발생하니 늦지 않게 와주시면 감사하겠습니다.\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층`;
+      const text = `[🏁 총총 FC 당일 경기 안내‼️]\n\n안녕하세요 총총FC 여러분\n오늘 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n* 경기 10분전 도착하시어 환복해주시면 원활한 경기진행이 됩니다.\n* 경기 시작 10분 후 부터 지각으로 간주되어 지각비가 발생하니 늦지 않게 와주시면 감사하겠습니다.\n\n⚽️ 구장위치\n강서염창 로꼬풋살스타디움\n서울특별시 강서구 양천로67길 63 염창동공장`;
       window.Kakao.Share.sendDefault({ objectType: 'text', text: text, link: { mobileWebUrl: magicLinkUrl, webUrl: magicLinkUrl }, buttonTitle: '웹사이트 확인하기' });
     } else { alert('카카오톡 기능을 불러오는 중입니다. 잠시 후 시도해주세요.'); }
   };
@@ -1185,7 +1185,7 @@ export default function FutsalCloudApp() {
                 <>
                   <div className="space-y-2 mb-6">
                     <p className="text-xl font-bold flex items-center gap-2">📅 {formatDateUI(upcomingMatch.date, `${upcomingMatch.start_time} ~ ${upcomingMatch.end_time}`)}</p>
-                    <p className="text-md text-gray-600 flex items-center gap-2">🏟️ 용산 더베이스 풋살장</p>
+                    <p className="text-md text-gray-600 flex items-center gap-2">🏟️ 강서염창 로꼬풋살스타디움</p>
                   </div>
 
                   <div className="p-4 bg-gray-50 rounded-xl mb-4 text-center border shadow-sm">
@@ -1220,7 +1220,7 @@ export default function FutsalCloudApp() {
             <div className="p-5 bg-gray-200 rounded-2xl shadow-sm opacity-60">
               <h2 className="text-md font-bold text-gray-500 mb-3 flex items-center gap-1">🔜 다음 경기 예정</h2>
               {nextUpcomingMatch ? (
-                <><p className="text-sm font-medium text-gray-600">📅 {formatDateUI(nextUpcomingMatch.date)}</p><p className="text-sm text-gray-600 mt-1">🏟️ 용산 더베이스 풋살장</p></>
+                <><p className="text-sm font-medium text-gray-600">📅 {formatDateUI(nextUpcomingMatch.date)}</p><p className="text-sm text-gray-600 mt-1">🏟️ 강서염창 로꼬풋살스타디움</p></>
               ) : (<p className="text-sm font-medium text-gray-500">일정 미정</p>)}
             </div>
 
