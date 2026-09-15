@@ -29,6 +29,174 @@ const calculateLevel = (stats) => {
   return Number((sum / 6).toFixed(2));
 };
 
+// --- 자동 보정 레벨 ---
+// 기본 능력치 평균을 중심값으로 두고 최근 출전률, 성별 정규화 폼, 운영진 활약도를 반영합니다.
+// 자동 보정은 약 -1.20 ~ +1.20 범위이며, 실제 DB의 6개 능력치를 덮어쓰지 않습니다.
+const calculateDynamicLevel = (player, allRecords = [], schedules = [], allPlayers = []) => {
+  if (!player) return 0;
+
+  const baseLevel = calculateLevel(player);
+  const playerRecords = allRecords
+    .filter(r => r.player_id === player.id)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+  // 월 2회 정도의 경기 빈도를 고려해 최근 4경기(약 2개월)를 현재 폼 구간으로 사용합니다.
+  const completedScheduleDates = schedules
+    .filter(s => s.is_completed)
+    .map(s => s.date);
+
+  const fallbackRecordDates = [...new Set(allRecords.map(r => r.date))];
+
+  const completedDates = [...new Set(
+    completedScheduleDates.length > 0 ? completedScheduleDates : fallbackRecordDates
+  )].sort();
+
+  if (completedDates.length === 0) return baseLevel;
+
+  const recentDates = completedDates.slice(-4);
+  const recentDateSet = new Set(recentDates);
+  const recentRecords = playerRecords.filter(r => recentDateSet.has(r.date));
+
+  // ① 경험 보정: 누적 출전 경험은 작은 가산만 유지 (최대 +0.10)
+  const experienceAdjustment = Math.min(playerRecords.length * 0.008, 0.10);
+
+  // ② 최근 4경기 출전률
+  // 50% 출전을 중립점으로 보고, 전 경기 출전은 상승 / 장기 결장은 하락
+  const recentAttendanceRate = recentDates.length > 0
+    ? recentRecords.length / recentDates.length
+    : 0;
+
+  const attendanceAdjustment = Math.max(
+    -0.35,
+    Math.min(0.35, (recentAttendanceRate - 0.50) * 0.70)
+  );
+
+  // ③ 성별 정규화 최근 폼
+  // 남녀의 절대 득점/도움 빈도가 다를 수 있으므로 같은 성별 선수의 최근 경기당 공격기여 평균과 비교합니다.
+  // 공격기여 = 골 + (어시스트 × 0.7)
+  const sameGenderPlayers = allPlayers.filter(
+    p => p.gender === player.gender && p.group !== '게스트'
+  );
+
+  const sameGenderIds = new Set(sameGenderPlayers.map(p => p.id));
+  const genderRecentRecords = allRecords.filter(
+    r => sameGenderIds.has(r.player_id) && recentDateSet.has(r.date)
+  );
+
+  const genderGamesPlayed = genderRecentRecords.length;
+  const genderAttackPoints = genderRecentRecords.reduce(
+    (sum, r) => sum + Number(r.goals || 0) + Number(r.assists || 0) * 0.7,
+    0
+  );
+
+  const genderAttackPerGame = genderGamesPlayed > 0
+    ? genderAttackPoints / genderGamesPlayed
+    : 0;
+
+  const playerRecentGames = recentRecords.length;
+  const playerRecentAttackPoints = recentRecords.reduce(
+    (sum, r) => sum + Number(r.goals || 0) + Number(r.assists || 0) * 0.7,
+    0
+  );
+
+  const playerRecentAttackPerGame = playerRecentGames > 0
+    ? playerRecentAttackPoints / playerRecentGames
+    : 0;
+
+  // 같은 성별 평균 대비 얼마나 위/아래인지 계산.
+  // 여성의 평균 득점 빈도가 낮더라도 여성 평균을 기준으로 비교되므로 불리하지 않습니다.
+  let genderFormAdjustment = 0;
+
+  if (playerRecentGames > 0 && genderGamesPlayed > 0) {
+    const baseline = Math.max(genderAttackPerGame, 0.15);
+    const relativePerformance = (playerRecentAttackPerGame - genderAttackPerGame) / baseline;
+
+    // 최근 2경기 미만은 표본이 작아 영향도를 절반 이하로 제한
+    const sampleWeight = Math.min(playerRecentGames / 2, 1);
+
+    genderFormAdjustment = Math.max(
+      -0.65,
+      Math.min(0.65, relativePerformance * 0.38 * sampleWeight)
+    );
+  }
+
+  // ④ 본인 평소 대비 최근 폼도 소폭 반영
+  // 같은 성별 평균만으로 평가하면 특정 포지션이 불리할 수 있어 자기 기록과의 비교를 함께 사용합니다.
+  const careerGames = playerRecords.length;
+  const careerAttackPoints = playerRecords.reduce(
+    (sum, r) => sum + Number(r.goals || 0) + Number(r.assists || 0) * 0.7,
+    0
+  );
+  const careerAttackPerGame = careerGames > 0
+    ? careerAttackPoints / careerGames
+    : 0;
+
+  let personalFormAdjustment = 0;
+  if (playerRecentGames >= 2 && careerGames >= 3) {
+    personalFormAdjustment = Math.max(
+      -0.25,
+      Math.min(
+        0.25,
+        (playerRecentAttackPerGame - careerAttackPerGame) * 0.25
+      )
+    );
+  }
+
+  // ⑤ 운영진 활약도 평가 (1~5점)
+  // 3점 = 중립, 4~5점 = 상승, 1~2점 = 하락
+  // 최근 4경기 중 실제 평가가 입력된 경기만 사용합니다.
+  // 최대 ±0.30으로 전체 자동 레벨 변동폭(±1.20)의 약 25%를 담당합니다.
+  const ratedRecentRecords = recentRecords.filter(r => {
+    const rating = Number(r.performance_rating);
+    return rating >= 1 && rating <= 5;
+  });
+
+  let performanceRatingAdjustment = 0;
+  if (ratedRecentRecords.length > 0) {
+    const averageRating = ratedRecentRecords.reduce(
+      (sum, r) => sum + Number(r.performance_rating),
+      0
+    ) / ratedRecentRecords.length;
+
+    // 평가 1경기만 있을 때는 영향도를 절반으로 제한하고,
+    // 2경기 이상부터 최대 영향도를 적용합니다.
+    const ratingSampleWeight = Math.min(ratedRecentRecords.length / 2, 1);
+    performanceRatingAdjustment =
+      ((averageRating - 3) / 2) * 0.30 * ratingSampleWeight;
+  }
+
+  // ⑥ 연속 결장 보정: 경기 자체가 적으므로 2회부터 반응
+  let consecutiveMisses = 0;
+  for (let i = completedDates.length - 1; i >= 0; i--) {
+    const played = playerRecords.some(r => r.date === completedDates[i]);
+    if (played) break;
+    consecutiveMisses += 1;
+  }
+
+  let inactivityAdjustment = 0;
+  if (consecutiveMisses >= 4) inactivityAdjustment = -0.35;
+  else if (consecutiveMisses >= 3) inactivityAdjustment = -0.25;
+  else if (consecutiveMisses >= 2) inactivityAdjustment = -0.12;
+
+  // 월 2회 경기 빈도를 고려하여 이전보다 다이내믹한 -1.20 ~ +1.20 변동 허용
+  const totalAdjustment = Math.max(
+    -1.20,
+    Math.min(
+      1.20,
+      experienceAdjustment +
+      attendanceAdjustment +
+      genderFormAdjustment +
+      personalFormAdjustment +
+      performanceRatingAdjustment +
+      inactivityAdjustment
+    )
+  );
+
+  return Number(
+    Math.max(1, Math.min(10, baseLevel + totalAdjustment)).toFixed(2)
+  );
+};
+
 const calculateExpireDate = (type, dateStr) => {
   if (type === '연납형') {
     const nextYear = new Date().getFullYear() + 1;
@@ -159,7 +327,7 @@ const MoveTeamModal = ({ player, currentTeam, teamCount, onMove, onClose }) => {
   );
 };
 
-const PlayerDetailModal = ({ player, records, totalMatches, onClose }) => {
+const PlayerDetailModal = ({ player, players, records, schedules, totalMatches, onClose }) => {
   if (!player) return null;
   const history = records.filter(r => r.player_id === player.id).sort((a, b) => new Date(b.date) - new Date(a.date));
   const totalGoals = history.reduce((acc, cur) => acc + cur.goals, 0);
@@ -167,6 +335,9 @@ const PlayerDetailModal = ({ player, records, totalMatches, onClose }) => {
   const attendanceCount = history.length;
   const attendanceRate = totalMatches > 0 ? Math.round((attendanceCount / totalMatches) * 100) : 0;
   
+  
+  const baseLevel = calculateLevel(player);
+  const dynamicLevel = calculateDynamicLevel(player, records, schedules, players);
   const dday = player.group === '스타즈' ? getDday(player.expire_date) : null;
   
   const chartData = [
@@ -230,11 +401,12 @@ const PlayerDetailModal = ({ player, records, totalMatches, onClose }) => {
                   </RadarChart>
                 </ResponsiveContainer>
                 <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-8 text-xs font-bold text-blue-800 bg-white/80 px-2 rounded">
-                  Lv.{player.level}
+                  Lv.{dynamicLevel}
                 </div>
               </div>
               <div className="mt-4 text-center">
-                <p className="text-2xl font-bold text-blue-700">Level {player.level}</p>
+                <p className="text-2xl font-bold text-blue-700">자동 Level {dynamicLevel}</p>
+                <p className="text-xs text-gray-400 mb-1">기본 Lv.{baseLevel} + 최근 경기 기록 보정</p>
                 <p className="text-sm text-gray-600 mb-2">성별: {player.gender} | 등급: <span className="font-bold text-blue-600">{player.group||'일반'}</span></p>
 
                 <div className="flex justify-center gap-3 mb-2">
@@ -278,6 +450,9 @@ const PlayerDetailModal = ({ player, records, totalMatches, onClose }) => {
                       <span>팀{h.team}</span>
                       <span className="font-bold text-blue-600">{h.goals}골</span>
                       <span className="font-bold text-green-600">{h.assists}어시</span>
+                      <span className={`font-bold ${h.performance_rating ? 'text-amber-600' : 'text-gray-300'}`}>
+                        {h.performance_rating ? `⭐${h.performance_rating}` : '미평가'}
+                      </span>
                     </div>
                   ))
                 }
@@ -425,7 +600,7 @@ export default function FutsalCloudApp() {
   const [showGuestsInList, setShowGuestsInList] = useState(false);
 
   const [filterGender, setFilterGender] = useState('all');
-  const [sortConfig, setSortConfig] = useState({ key: 'level', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'dynamic_level', direction: 'desc' });
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -450,6 +625,15 @@ export default function FutsalCloudApp() {
     script.onload = () => {
       if (!window.Kakao.isInitialized()) window.Kakao.init(process.env.NEXT_PUBLIC_KAKAO_APP_KEY); 
     };
+
+    // SheetJS 공식 브라우저 스크립트 로드 (별도 npm 설치 불필요)
+    if (!document.getElementById('sheetjs-xlsx')) {
+      const xlsxScript = document.createElement('script');
+      xlsxScript.id = 'sheetjs-xlsx';
+      xlsxScript.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+      xlsxScript.async = true;
+      document.head.appendChild(xlsxScript);
+    }
   }, []);
 
   const formatKakaoDate = (dateStr) => {
@@ -982,13 +1166,118 @@ export default function FutsalCloudApp() {
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
+
+  // --- 선수/경기 기록 엑셀(.xlsx) 내보내기 ---
+  const exportPlayersToExcel = () => {
+    if (!isAdmin) return alert('운영진만 가능합니다.');
+
+    const XLSX = window.XLSX;
+    if (!XLSX) {
+      return alert('엑셀 기능을 불러오는 중입니다. 잠시 후 다시 눌러주세요.');
+    }
+
+    const memberPlayers = players.filter(p => p.group !== '게스트');
+
+    const playerRows = memberPlayers
+      .map(p => {
+        const stat = playerStats[p.id] || { goals: 0, assists: 0, attendance: 0 };
+        const attendanceRate = totalMatchCount > 0
+          ? Math.round((stat.attendance / totalMatchCount) * 100)
+          : 0;
+
+        const ratedRecords = records.filter(r =>
+          r.player_id === p.id &&
+          Number(r.performance_rating) >= 1 &&
+          Number(r.performance_rating) <= 5
+        );
+        const averagePerformanceRating = ratedRecords.length > 0
+          ? Number((
+              ratedRecords.reduce((sum, r) => sum + Number(r.performance_rating), 0) /
+              ratedRecords.length
+            ).toFixed(2))
+          : '-';
+
+        return {
+          '이름': p.name,
+          '성별': p.gender,
+          '회원 구분': p.group || '일반',
+          '회원 유형': p.stars_type || '-',
+          '기본 레벨': calculateLevel(p),
+          '자동 레벨': calculateDynamicLevel(p, records, schedules, players),
+          '자동 보정치': Number((calculateDynamicLevel(p, records, schedules, players) - calculateLevel(p)).toFixed(2)),
+          '밸런스': Number(p.balance || 0),
+          '패스': Number(p.passing || 0),
+          '드리블': Number(p.dribble || 0),
+          '슈팅': Number(p.shooting || 0),
+          '터치': Number(p.touch || 0),
+          '체력': Number(p.stamina || 0),
+          '출전 횟수': Number(stat.attendance || 0),
+          '출석률(%)': attendanceRate,
+          '골': Number(stat.goals || 0),
+          '어시스트': Number(stat.assists || 0),
+          '공격포인트': Number(stat.goals || 0) + Number(stat.assists || 0),
+          '평균 활약도': averagePerformanceRating,
+          '매너 점수': Number(p.manner_score ?? 100),
+          '옐로카드': Number(p.yellow_cards || 0),
+          '가입/기준일': p.payment_date || '-',
+          '만료일': p.expire_date || '-'
+        };
+      })
+      .sort((a, b) => b['출전 횟수'] - a['출전 횟수'] || b['자동 레벨'] - a['자동 레벨'] || a['이름'].localeCompare(b['이름']));
+
+    const recordRows = records
+      .map(r => {
+        const p = players.find(pl => pl.id === r.player_id);
+        if (!p) return null;
+        return {
+          '경기 날짜': r.date,
+          '이름': p.name,
+          '성별': p.gender,
+          '회원 구분': p.group || '일반',
+          '팀': r.team ? `TEAM ${r.team}` : '미배정',
+          '골': Number(r.goals || 0),
+          '어시스트': Number(r.assists || 0),
+          '공격포인트': Number(r.goals || 0) + Number(r.assists || 0),
+          '활약도(1~5)': r.performance_rating || '-',
+          '뒷풀이 참석': r.party_attendance ? 'O' : 'X'
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b['경기 날짜'].localeCompare(a['경기 날짜']) || a['이름'].localeCompare(b['이름']));
+
+    const wb = XLSX.utils.book_new();
+    const wsPlayers = XLSX.utils.json_to_sheet(playerRows);
+    const wsRecords = XLSX.utils.json_to_sheet(recordRows);
+
+    // 보기 편하도록 열 너비 설정
+    wsPlayers['!cols'] = [
+      { wch: 12 }, { wch: 8 }, { wch: 11 }, { wch: 14 },
+      { wch: 10 }, { wch: 10 }, { wch: 11 },
+      { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 },
+      { wch: 11 }, { wch: 11 }, { wch: 8 }, { wch: 10 }, { wch: 11 },
+      { wch: 11 }, { wch: 11 }, { wch: 10 }, { wch: 13 }, { wch: 13 }
+    ];
+    wsRecords['!cols'] = [
+      { wch: 13 }, { wch: 12 }, { wch: 8 }, { wch: 11 }, { wch: 10 },
+      { wch: 8 }, { wch: 10 }, { wch: 11 }, { wch: 12 }, { wch: 12 }
+    ];
+
+    XLSX.utils.book_append_sheet(wb, wsPlayers, '선수 종합현황');
+    XLSX.utils.book_append_sheet(wb, wsRecords, '경기별 상세기록');
+
+    const today = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `총총FC_선수통계_${today}.xlsx`);
+  };
+
   const generateTeams = async () => {
     const currentDayRecords = records.filter(r => r.date === selectedDate);
     if (!currentDayRecords.length) return alert('참여 인원이 없습니다.');
     if (!window.confirm('팀을 새로 배정하시겠습니까? (기존 배정 초기화)\n* 초대자와 게스트는 무조건 같은 팀으로 배정됩니다.')) return;
 
     const currentDayPlayerIds = currentDayRecords.map(r => r.player_id);
-    const attendedPlayers = players.filter(p => currentDayPlayerIds.includes(p.id));
+    const attendedPlayers = players
+      .filter(p => currentDayPlayerIds.includes(p.id))
+      .map(p => ({ ...p, effectiveLevel: calculateDynamicLevel(p, records, schedules, players) }));
     const noise = () => Math.random() * 0.5 - 0.25; 
 
     const bundles = [];
@@ -1006,18 +1295,18 @@ export default function FutsalCloudApp() {
     });
 
     const singles = attendedPlayers.filter(p => !processedIds.has(p.id));
-    const singleFemales = singles.filter(p => p.gender === '여성').sort((a,b) => (b.level+noise()) - (a.level+noise()));
-    const singleMales = singles.filter(p => p.gender === '남성').sort((a,b) => (b.level+noise()) - (a.level+noise()));
+    const singleFemales = singles.filter(p => p.gender === '여성').sort((a,b) => (b.effectiveLevel+noise()) - (a.effectiveLevel+noise()));
+    const singleMales = singles.filter(p => p.gender === '남성').sort((a,b) => (b.effectiveLevel+noise()) - (a.effectiveLevel+noise()));
 
     const teams = Array.from({ length: teamCount }, () => []);
-    bundles.sort((a, b) => b.reduce((s,p)=>s+p.level,0) - a.reduce((s,p)=>s+p.level,0));
+    bundles.sort((a, b) => b.reduce((s,p)=>s+p.effectiveLevel,0) - a.reduce((s,p)=>s+p.effectiveLevel,0));
     
     bundles.forEach(bundle => {
         let targetIdx = 0; let minSum = Infinity;
         const minSize = Math.min(...teams.map(t => t.length));
         const candidates = teams.map((t, i) => t.length === minSize ? i : -1).filter(i => i !== -1);
         for (let idx of (candidates.length > 0 ? candidates : [0])) {
-            const sum = teams[idx].reduce((acc, curr) => acc + curr.level, 0);
+            const sum = teams[idx].reduce((acc, curr) => acc + curr.effectiveLevel, 0);
             if (sum < minSum) { minSum = sum; targetIdx = idx; }
         }
         teams[targetIdx].push(...bundle);
@@ -1028,7 +1317,7 @@ export default function FutsalCloudApp() {
         const candidates = teams.map((t, i) => t.length === minSize ? i : -1).filter(i => i !== -1);
         let targetIdx = candidates[0]; let minSum = Infinity;
         for (let idx of candidates) {
-            const sum = teams[idx].reduce((acc, curr) => acc + curr.level, 0);
+            const sum = teams[idx].reduce((acc, curr) => acc + curr.effectiveLevel, 0);
             if (sum < minSum) { minSum = sum; targetIdx = idx; }
         }
         teams[targetIdx].push(p);
@@ -1039,7 +1328,7 @@ export default function FutsalCloudApp() {
         const candidates = teams.map((t, i) => t.length === minSize ? i : -1).filter(i => i !== -1);
         let targetIdx = candidates[0]; let minSum = Infinity;
         for (let idx of candidates) {
-            const sum = teams[idx].reduce((acc, curr) => acc + curr.level, 0);
+            const sum = teams[idx].reduce((acc, curr) => acc + curr.effectiveLevel, 0);
             if (sum < minSum) { minSum = sum; targetIdx = idx; }
         }
         teams[targetIdx].push(p);
@@ -1089,6 +1378,26 @@ export default function FutsalCloudApp() {
     if (!error) fetchData();
   };
 
+  const updatePerformanceRating = async (pid, rating) => {
+    if (!isAdmin) return;
+
+    const normalizedRating = rating === null
+      ? null
+      : Math.max(1, Math.min(5, Number(rating)));
+
+    const { error } = await supabase
+      .from('match_records')
+      .update({ performance_rating: normalizedRating })
+      .eq('date', selectedDate)
+      .eq('player_id', pid);
+
+    if (!error) {
+      fetchData();
+    } else {
+      alert('활약도 저장 중 오류가 발생했습니다.');
+    }
+  };
+
   const handleMoveTeam = async (pid, newTeamNo) => {
     const { error } = await supabase.from('match_records').update({ team: newTeamNo }).eq('date', selectedDate).eq('player_id', pid);
     if (!error) { alert('이동되었습니다.'); setMovePlayerTarget(null); fetchData(); }
@@ -1117,7 +1426,11 @@ export default function FutsalCloudApp() {
   }, [players, selectedDate, records]);
 
   const processedPlayers = useMemo(() => {
-    let data = [...players].map(p => ({ ...p, group: (p.group === '스타즈' || p.group === '게스트') ? p.group : '일반' }));
+    let data = [...players].map(p => ({
+      ...p,
+      group: (p.group === '스타즈' || p.group === '게스트') ? p.group : '일반',
+      dynamic_level: calculateDynamicLevel(p, records, schedules, players)
+    }));
     if (!showGuestsInList) data = data.filter(p => p.group !== '게스트');
     if (filterGender !== 'all') data = data.filter(p => p.gender === filterGender);
     
@@ -1127,7 +1440,7 @@ export default function FutsalCloudApp() {
       return 0;
     });
     return data;
-  }, [players, filterGender, sortConfig, showGuestsInList]);
+  }, [players, records, filterGender, sortConfig, showGuestsInList]);
 
   const handleSort = (key) => {
     let direction = 'desc';
@@ -1449,13 +1762,28 @@ export default function FutsalCloudApp() {
             )}
 
             <div className="bg-white rounded shadow overflow-hidden">
-              <div className="p-3 border-b bg-gray-50 flex flex-col sm:flex-row justify-between items-center gap-3">
+              <div className="p-3 border-b bg-gray-50">
+                {isAdmin && (
+                  <div className="mb-3 text-[11px] sm:text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-lg p-2 font-medium">
+                    💡 자동 Lv = 기본 능력치 + 최근 4경기 출전률 + 같은 성별 대비 폼 + 본인 최근 폼 + 운영진 활약도(약 25%) · 최종 변동 약 -1.20 ~ +1.20
+                  </div>
+                )}
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
                  <div className="flex gap-1">
                    {['all', '남성', '여성'].map(f => (
                      <button key={f} onClick={()=>setFilterGender(f)} className={`px-3 py-1 text-xs rounded-full font-bold border ${filterGender === f ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300'}`}>{f === 'all' ? '전체' : f}</button>
                    ))}
                  </div>
-                 <div className="flex items-center gap-2">
+                 <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-end">
+                   {isAdmin && (
+                     <button
+                       onClick={exportPlayersToExcel}
+                       className="text-xs px-3 py-1.5 bg-green-600 text-white border border-green-700 rounded font-bold hover:bg-green-700 flex items-center gap-1.5 shadow-sm"
+                       title="선수 종합현황과 경기별 기록을 Excel(.xlsx)로 다운로드"
+                     >
+                       <Download size={14}/> 선수 엑셀 다운로드
+                     </button>
+                   )}
                    <button onClick={() => setShowGuestsInList(!showGuestsInList)} className={`text-xs px-2 py-1 border rounded font-bold transition-colors ${showGuestsInList ? 'bg-green-100 text-green-800 border-green-300' : 'bg-white text-gray-500 border-gray-300'}`}>
                      {showGuestsInList ? '✔️ 게스트 포함해서 보는 중' : '게스트 숨기기'}
                    </button>
@@ -1464,6 +1792,7 @@ export default function FutsalCloudApp() {
                    )}
                  </div>
               </div>
+              </div>
 
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-center whitespace-nowrap">
@@ -1471,7 +1800,7 @@ export default function FutsalCloudApp() {
                     <tr>
                       <th className="p-3 cursor-pointer hover:bg-gray-200" onClick={()=>handleSort('name')}>이름/회원 <SortIcon colKey="name"/></th>
                       <th className="p-3">성별</th>
-                      <th className="p-3 text-blue-600 cursor-pointer hover:bg-gray-200" onClick={()=>handleSort('level')}>Lv <SortIcon colKey="level"/></th>
+                      <th className="p-3 text-blue-600 cursor-pointer hover:bg-gray-200" onClick={()=>handleSort('dynamic_level')}>자동 Lv <SortIcon colKey="dynamic_level"/></th>
                       <th className="p-3 cursor-pointer hover:bg-gray-200" onClick={()=>handleSort('manner_score')}>매너 <SortIcon colKey="manner_score"/></th>
                       {isAdmin && <th className="p-3">관리 (더블클릭 상세)</th>}
                     </tr>
@@ -1508,7 +1837,18 @@ export default function FutsalCloudApp() {
                           <>
                             <td className="p-3"><div className="flex flex-col items-center justify-center"><PlayerName player={p} records={records} hideBadge={true}/></div></td>
                             <td className="p-3"><span className={`px-2 py-1 rounded text-xs ${p.gender==='남성'?'bg-blue-100 text-blue-800':'bg-pink-100 text-pink-800'}`}>{p.gender}</span></td>
-                            <td className="p-3 font-bold text-blue-600">{p.level}</td>
+                            <td className="p-3">
+                              <div className="flex flex-col items-center">
+                                <span className={`font-black ${p.dynamic_level > calculateLevel(p) ? 'text-blue-600' : p.dynamic_level < calculateLevel(p) ? 'text-red-600' : 'text-gray-700'}`}>
+                                  {p.dynamic_level}
+                                </span>
+                                {isAdmin && Math.abs(p.dynamic_level - calculateLevel(p)) >= 0.01 && (
+                                  <span className={`text-[10px] ${p.dynamic_level > calculateLevel(p) ? 'text-blue-400' : 'text-red-400'}`}>
+                                    기본 {calculateLevel(p)} ({p.dynamic_level > calculateLevel(p) ? '▲' : '▼'}{Math.abs(p.dynamic_level - calculateLevel(p)).toFixed(2)})
+                                  </span>
+                                )}
+                              </div>
+                            </td>
                             
                             {/* --- [추가됨] 매너점수 및 경고 표시 --- */}
                             <td className="p-3">
@@ -1762,7 +2102,7 @@ export default function FutsalCloudApp() {
                     return (
                       <div key={p.id} className={`px-3 py-1 rounded border text-sm font-bold flex items-center gap-2 ${isAssigned ? 'bg-gray-100 text-gray-500' : 'bg-blue-50 text-blue-700 border-blue-300'}`}>
                          <PlayerName player={p} records={records} hideBadge={true}/>
-                         <span className="text-xs bg-white px-1 rounded border ml-1">Lv.{p.level}</span>
+                         <span className="text-xs bg-white px-1 rounded border ml-1">Lv.{calculateDynamicLevel(p, records, schedules, players)}</span>
                          {isAssigned && <span className="text-xs text-green-600 ml-1">→ 팀{p.record.team}</span>}
                       </div>
                     );
@@ -1813,7 +2153,7 @@ export default function FutsalCloudApp() {
                   const members = records.filter(r => r.date === selectedDate && r.team === teamNo);
                   const teamPlayers = members.map(r => players.find(p => p.id === r.player_id)).filter(Boolean);
                   
-                  const avg = teamPlayers.length ? (teamPlayers.reduce((a,b)=>a+b.level,0)/teamPlayers.length).toFixed(2) : 0;
+                  const avg = teamPlayers.length ? (teamPlayers.reduce((a,b)=>a+calculateDynamicLevel(b, records, schedules, players),0)/teamPlayers.length).toFixed(2) : 0;
                   const maleCount = teamPlayers.filter(p => p.gender === '남성').length;
                   const femaleCount = teamPlayers.filter(p => p.gender === '여성').length;
 
@@ -1835,7 +2175,7 @@ export default function FutsalCloudApp() {
                                   <span className="font-bold flex items-center gap-1 text-sm md:text-base">
                                     <span className={`w-2 h-2 rounded-full shrink-0 ${p.gender==='남성'?'bg-blue-500':'bg-pink-500'}`}></span>
                                     <PlayerName player={p} records={records} hideBadge={true}/>
-                                    <span className="text-xs text-gray-400 font-normal shrink-0 ml-1">({p.level})</span>
+                                    <span className="text-xs text-gray-400 font-normal shrink-0 ml-1">({calculateDynamicLevel(p, records, schedules, players)})</span>
                                   </span>
                                   
                                   {isAdmin && (
@@ -1865,6 +2205,41 @@ export default function FutsalCloudApp() {
                                     )}
                                   </div>
                                 </div>
+
+                                {isAdmin && (
+                                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-2">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                      <span className="text-xs font-bold text-amber-800">⭐ 오늘 활약도</span>
+                                      <span className="text-[10px] text-amber-600">자동 Lv에 약 25% 반영</span>
+                                    </div>
+                                    <div className="flex gap-1">
+                                      {[1,2,3,4,5].map(score => {
+                                        const selected = Number(record.performance_rating) === score;
+                                        return (
+                                          <button
+                                            key={score}
+                                            type="button"
+                                            onClick={() => updatePerformanceRating(
+                                              p.id,
+                                              selected ? null : score
+                                            )}
+                                            title={score === 1 ? '아쉬움' : score === 2 ? '조금 아쉬움' : score === 3 ? '보통' : score === 4 ? '좋음' : '매우 좋음'}
+                                            className={`flex-1 py-1.5 rounded text-xs font-black border transition-colors ${
+                                              selected
+                                                ? 'bg-amber-400 text-amber-950 border-amber-500'
+                                                : 'bg-white text-gray-500 border-gray-300 hover:bg-amber-100'
+                                            }`}
+                                          >
+                                            {score}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                    <p className="text-[10px] text-gray-500 mt-1.5 text-center">
+                                      3점=중립 · 같은 점수를 다시 누르면 평가 취소
+                                    </p>
+                                  </div>
+                                )}
                               </div>
                             )
                           })}
@@ -2282,7 +2657,7 @@ export default function FutsalCloudApp() {
       )}
 
       {detailPlayer && (
-        <PlayerDetailModal player={detailPlayer} records={records} totalMatches={totalMatchCount} onClose={() => setDetailPlayer(null)} />
+        <PlayerDetailModal player={detailPlayer} players={players} records={records} schedules={schedules} totalMatches={totalMatchCount} onClose={() => setDetailPlayer(null)} />
       )}
 
       {movePlayerTarget && (() => {
