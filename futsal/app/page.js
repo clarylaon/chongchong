@@ -301,6 +301,8 @@ export default function FutsalCloudApp() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [matchTimeStart, setMatchTimeStart] = useState('20:00');
   const [matchTimeEnd, setMatchTimeEnd] = useState('22:00');
+  const [matchLocation, setMatchLocation] = useState('');
+  const [voteGender, setVoteGender] = useState('all'); // all | 남성 | 여성
   const [deadlineDate, setDeadlineDate] = useState(new Date().toISOString().split('T')[0]);
   const [deadlineTime, setDeadlineTime] = useState('18:00');
   const [isInitialized, setIsInitialized] = useState(false);
@@ -417,6 +419,7 @@ export default function FutsalCloudApp() {
   const [showVoteModal, setShowVoteModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareTemplate, setShareTemplate] = useState('기본형');
+  const [customShareTitle, setCustomShareTitle] = useState('');
   const [showGuestModal, setShowGuestModal] = useState(false);
   const [guestForm, setGuestForm] = useState({ name: '', gender: '남성', inviter: '', level: 5 });
   const [showGuestsInList, setShowGuestsInList] = useState(false);
@@ -456,18 +459,42 @@ export default function FutsalCloudApp() {
     return { m: dt.getMonth() + 1, d: dt.getDate(), day: days[dt.getDay()] };
   };
 
+  const getVoteTargetLabel = (value = voteGender) => {
+    if (value === '남성') return '남성 선수만';
+    if (value === '여성') return '여성 선수만';
+    return '전체 선수';
+  };
+
+  const isPlayerAllowedForVote = (player) => {
+    const schedule = schedules.find(s => s.date === selectedDate);
+    const restriction = schedule?.vote_gender || voteGender || 'all';
+    return restriction === 'all' || player?.gender === restriction;
+  };
+
   const getShareText = (type) => {
     const match = formatKakaoDate(selectedDate);
     const dead = formatKakaoDate(deadlineDate);
+    const venueText = matchLocation.trim() || '미정';
+    const voteTargetText = getVoteTargetLabel();
     const partyText = hasParty ? `\n\n🍻 뒷풀이 안내\n장소: ${partyLocation || '추후 공지'}\n* 링크에서 뒷풀이 참석 여부도 꼭 함께 체크해 주세요!` : '';
-    
+
     if (type === '게스트용') {
-      return `[🏁 총총 FC 게스트초청데이‼️]\n\n안녕하세요 총총FC 여러분~\n${match.m}월 ${match.d}일 경기는 “게스트초청데이” 입니다\n우리 주변에 축구를 사랑하는 지인들을 초대하여 (축잘알,선출 환영) 총총FC를 홍보하고, 함께 뛰고 친목할 수 있는 시간을 가지려 합니다! 타대학/대학원 상관없이 초청가능하니 많은 참여 부탁드립니다\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n* 경기 10분전 도착하시어 환복해주시면 원활한 경기진행이 됩니다.\n\n⚽️ 구장위치\n용산 더베이스 풋살장\n서울 용산구 한강대로23길 55 아이파크몰 리빙파크 9층${partyText}\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n* 게스트: 10,000원\n\n🏦 참가비는 '79422633613 카카오뱅크'로 입금 부탁드립니다.\n\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n\n* 일반회원은 입금완료 시 참석 확정입니다!\n* 게스트 비용은 미리 입금해주시면 감사하겠습니다!`;
+      return `[🏁 총총 FC 게스트초청데이‼️]\n\n안녕하세요 총총FC 여러분~\n${match.m}월 ${match.d}일 경기는 “게스트초청데이” 입니다\n우리 주변에 축구를 사랑하는 지인들을 초대하여 (축잘알,선출 환영) 총총FC를 홍보하고, 함께 뛰고 친목할 수 있는 시간을 가지려 합니다! 타대학/대학원 상관없이 초청가능하니 많은 참여 부탁드립니다\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n* 경기 10분전 도착하시어 환복해주시면 원활한 경기진행이 됩니다.\n\n⚽️ 구장위치\n${venueText}\n\n👥 투표 대상\n${voteTargetText}${partyText}\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n* 게스트: 10,000원\n\n🏦 참가비는 '79422633613 카카오뱅크'로 입금 부탁드립니다.\n\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n\n* 일반회원은 입금완료 시 참석 확정입니다!\n* 게스트 비용은 미리 입금해주시면 감사하겠습니다!`;
     }
-    return `[🏁 총총 FC 풋살 모임 투표 안내‼️]\n\n안녕하세요 총총FC 여러분\n${match.m}월 ${match.d}일 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n\n⚽️ 구장위치\n강서염창 로꼬풋살스타디움\n서울특별시 강서구 양천로67길 63 염창동공장${partyText}\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n\n🏦 참가비는 '79422633613 카카오뱅크'로 입금 부탁드립니다.\n\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n* 일반회원은 입금완료 시 참석 확정입니다!`;
+
+    if (type === '커스텀') {
+      const customTitle = customShareTitle.trim() || '커스텀 제목을 입력해주세요';
+      return `[🏁 ${customTitle}]\n\n안녕하세요 총총FC 여러분\n${match.m}월 ${match.d}일 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n\n⚽️ 구장위치\n${venueText}\n\n👥 투표 대상\n${voteTargetText}${partyText}\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n\n🏦 참가비는 '79422633613 카카오뱅크'로 입금 부탁드립니다.\n\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n* 일반회원은 입금완료 시 참석 확정입니다!`;
+    }
+
+    return `[🏁 총총 FC 풋살 모임 투표 안내‼️]\n\n안녕하세요 총총FC 여러분\n${match.m}월 ${match.d}일 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n\n⚽️ 구장위치\n${venueText}\n\n👥 투표 대상\n${voteTargetText}${partyText}\n\n💰 참가비:\n* 스타즈: 면제\n* 일반회원: 10,000원\n\n🏦 참가비는 '79422633613 카카오뱅크'로 입금 부탁드립니다.\n\n⏰ 마감: ${dead.m}월 ${dead.d}일 ${deadlineTime}까지\n\n* 일반회원은 입금완료 시 참석 확정입니다!`;
   };
 
   const executeKakaoShare = () => {
+    if (shareTemplate === '커스텀' && !customShareTitle.trim()) {
+      return alert('커스텀 공지 제목을 입력해주세요.');
+    }
+
     if (window.Kakao && window.Kakao.isInitialized()) {
       const magicLinkUrl = `${window.location.origin}${window.location.pathname}?vote=true&date=${selectedDate}`;
       const text = getShareText(shareTemplate);
@@ -480,7 +507,8 @@ export default function FutsalCloudApp() {
     if (window.Kakao && window.Kakao.isInitialized()) {
       const match = formatKakaoDate(selectedDate);
       const magicLinkUrl = `${window.location.origin}${window.location.pathname}`;
-      const text = `[🏁 총총 FC 당일 경기 안내‼️]\n\n안녕하세요 총총FC 여러분\n오늘 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n* 경기 10분전 도착하시어 환복해주시면 원활한 경기진행이 됩니다.\n* 경기 시작 10분 후 부터 지각으로 간주되어 지각비가 발생하니 늦지 않게 와주시면 감사하겠습니다.\n\n⚽️ 구장위치\n강서염창 로꼬풋살스타디움\n서울특별시 강서구 양천로67길 63 염창동공장`;
+      const venueText = matchLocation.trim() || '미정';
+      const text = `[🏁 총총 FC 당일 경기 안내‼️]\n\n안녕하세요 총총FC 여러분\n오늘 경기 안내드립니다!\n\n📅 일시\n${match.m}월 ${match.d}일 (${match.day}) ${matchTimeStart}~${matchTimeEnd} 경기\n* 경기 10분전 도착하시어 환복해주시면 원활한 경기진행이 됩니다.\n* 경기 시작 10분 후 부터 지각으로 간주되어 지각비가 발생하니 늦지 않게 와주시면 감사하겠습니다.\n\n⚽️ 구장위치\n${venueText}\n\n👥 투표 대상\n${getVoteTargetLabel()}`;
       window.Kakao.Share.sendDefault({ objectType: 'text', text: text, link: { mobileWebUrl: magicLinkUrl, webUrl: magicLinkUrl }, buttonTitle: '웹사이트 확인하기' });
     } else { alert('카카오톡 기능을 불러오는 중입니다. 잠시 후 시도해주세요.'); }
   };
@@ -513,21 +541,68 @@ export default function FutsalCloudApp() {
 
   useEffect(() => {
     if (isInitialized || schedules.length === 0) return;
+
     const todayStr = new Date().toISOString().split('T')[0];
     const upcoming = schedules.filter(s => s.date >= todayStr && !s.is_completed);
-    
-    if (upcoming.length > 0) {
-      setSelectedDate(upcoming[0].date);
-      setMatchTimeStart(upcoming[0].start_time || '20:00');
-      setMatchTimeEnd(upcoming[0].end_time || '22:00');
-      setDeadlineDate(upcoming[0].deadline_date || upcoming[0].date);
-      setDeadlineTime(upcoming[0].deadline_time || '18:00');
-      setHasParty(upcoming[0].has_party || false);
-      setPartyLocation(upcoming[0].party_location || '');
-      setPartyGuestsText(upcoming[0].party_guests || ''); 
-      setIsInitialized(true); 
+
+    // 카카오 공유 링크(?vote=true&date=YYYY-MM-DD)로 들어온 경우에는
+    // 링크에 들어있는 경기 날짜를 첫 번째 예정 경기보다 우선합니다.
+    let initialSchedule = null;
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const requestedDate = params.get('vote') === 'true' ? params.get('date') : null;
+      if (requestedDate) initialSchedule = schedules.find(s => s.date === requestedDate) || null;
+    }
+
+    if (!initialSchedule && upcoming.length > 0) initialSchedule = upcoming[0];
+
+    if (initialSchedule) {
+      setSelectedDate(initialSchedule.date);
+      setMatchTimeStart(initialSchedule.start_time || '20:00');
+      setMatchTimeEnd(initialSchedule.end_time || '22:00');
+      setMatchLocation(initialSchedule.location || '');
+      setVoteGender(initialSchedule.vote_gender || 'all');
+      setDeadlineDate(initialSchedule.deadline_date || initialSchedule.date);
+      setDeadlineTime(initialSchedule.deadline_time || '18:00');
+      setHasParty(initialSchedule.has_party || false);
+      setPartyLocation(initialSchedule.party_location || '');
+      setPartyGuestsText(initialSchedule.party_guests || '');
+      setIsInitialized(true);
     }
   }, [schedules, isInitialized]);
+
+  // 이미 저장된 경기 날짜로 이동하면 경기별 설정을 자동으로 불러옵니다.
+  useEffect(() => {
+    if (!isInitialized) return;
+    const schedule = schedules.find(s => s.date === selectedDate);
+    if (!schedule) return;
+
+    setMatchTimeStart(schedule.start_time || '20:00');
+    setMatchTimeEnd(schedule.end_time || '22:00');
+    setMatchLocation(schedule.location || '');
+    setVoteGender(schedule.vote_gender || 'all');
+    setDeadlineDate(schedule.deadline_date || schedule.date);
+    setDeadlineTime(schedule.deadline_time || '18:00');
+    setHasParty(schedule.has_party || false);
+    setPartyLocation(schedule.party_location || '');
+    setPartyGuestsText(schedule.party_guests || '');
+  }, [selectedDate, schedules, isInitialized]);
+
+  const handleScheduleDateChange = (newDate) => {
+    setSelectedDate(newDate);
+
+    // 신규 날짜라면 이전 경기 장소/제한 설정이 실수로 복사되지 않도록 초기화합니다.
+    const schedule = schedules.find(s => s.date === newDate);
+    if (!schedule) {
+      setMatchLocation('');
+      setVoteGender('all');
+      setDeadlineDate(newDate);
+      setDeadlineTime('18:00');
+      setHasParty(false);
+      setPartyLocation('');
+      setPartyGuestsText('');
+    }
+  };
 
   useEffect(() => {
     const currentDayIds = records.filter(r => r.date === selectedDate).map(r => r.player_id);
@@ -538,13 +613,25 @@ export default function FutsalCloudApp() {
 
   const handleSaveSchedule = async () => {
     if (!isAdmin) return;
+
+    const normalizedLocation = matchLocation.trim() || '미정';
+
     const { error } = await supabase.from('match_schedules').upsert({
       date: selectedDate, start_time: matchTimeStart, end_time: matchTimeEnd,
+      location: normalizedLocation,
+      vote_gender: voteGender,
       deadline_date: deadlineDate, deadline_time: deadlineTime,
       has_party: hasParty, party_location: partyLocation, party_guests: partyGuestsText
     });
-    if (!error) { alert(`${selectedDate} 경기 및 뒷풀이 일정이 등록되었습니다!`); fetchData(); } 
-    else { alert('일정 등록에 실패했습니다.'); }
+
+    if (!error) {
+      setMatchLocation(normalizedLocation);
+      alert(`${selectedDate} 경기 일정이 저장되었습니다!\n장소: ${normalizedLocation}\n투표 대상: ${getVoteTargetLabel(voteGender)}`);
+      fetchData();
+    } else {
+      console.error('일정 저장 오류:', error);
+      alert('일정 등록에 실패했습니다. Supabase에 location / vote_gender 컬럼이 추가되어 있는지 확인해주세요.');
+    }
   };
 
   const playerStats = useMemo(() => {
@@ -607,6 +694,12 @@ export default function FutsalCloudApp() {
     const isAttending = tempAttendance.includes(pid);
     const playerInfo = players.find(p => p.id === pid);
     const playerName = playerInfo ? playerInfo.name : '알수없음';
+
+    // 제한이 바뀌기 전에 이미 투표한 사람은 취소할 수 있게 두고,
+    // 새 참석 투표를 넣을 때만 성별 제한을 검사합니다.
+    if (!isAttending && playerInfo && !isPlayerAllowedForVote(playerInfo)) {
+      return alert(`🚫 이번 경기는 ${getVoteTargetLabel()} 투표할 수 있습니다.`);
+    }
     
     if (isAttending) {
       setTempAttendance(prev => prev.filter(id => id !== pid));
@@ -677,6 +770,11 @@ export default function FutsalCloudApp() {
     const isVoteClosed = new Date() > new Date(`${deadlineDate}T${deadlineTime}:00`);
     if (isVoteClosed && !isAdmin) return alert('⏰ 투표 시간이 마감되었습니다!');
     if (!guestForm.name) return;
+
+    const guestAllowed = voteGender === 'all' || guestForm.gender === voteGender;
+    if (!guestAllowed) {
+      return alert(`🚫 이번 경기는 ${getVoteTargetLabel()} 투표할 수 있습니다. 게스트 성별을 확인해주세요.`);
+    }
     setLoading(true);
 
     const { data: existingGuests } = await supabase.from('players').select('*').eq('group', '게스트').eq('name', guestForm.name);
@@ -1185,11 +1283,12 @@ export default function FutsalCloudApp() {
                 <>
                   <div className="space-y-2 mb-6">
                     <p className="text-xl font-bold flex items-center gap-2">📅 {formatDateUI(upcomingMatch.date, `${upcomingMatch.start_time} ~ ${upcomingMatch.end_time}`)}</p>
-                    <p className="text-md text-gray-600 flex items-center gap-2">🏟️ 강서염창 로꼬풋살스타디움</p>
+                    <p className="text-md text-gray-600 flex items-start gap-2">🏟️ <span className="whitespace-pre-line">{upcomingMatch.location || '미정'}</span></p>
+                    <p className="text-sm font-bold text-indigo-600 flex items-center gap-2">👥 투표 대상: {getVoteTargetLabel(upcomingMatch.vote_gender || 'all')}</p>
                   </div>
 
                   <div className="p-4 bg-gray-50 rounded-xl mb-4 text-center border shadow-sm">
-                    <p className="text-lg">🔥 현재 <strong className="text-blue-600 text-3xl mx-1">{tempAttendance.length}</strong>명 투표 완료</p>
+                    <p className="text-lg">🔥 현재 <strong className="text-blue-600 text-3xl mx-1">{records.filter(r => r.date === upcomingMatch.date).length}</strong>명 투표 완료</p>
                     {upcomingMatch.has_party && (
                       <div className="mt-3 pt-3 border-t border-gray-200">
                         <p className="text-sm font-bold text-purple-700 flex justify-center items-center gap-1">🍻 뒷풀이: {upcomingMatch.party_location || '장소 추후 공지'}</p>
@@ -1220,7 +1319,11 @@ export default function FutsalCloudApp() {
             <div className="p-5 bg-gray-200 rounded-2xl shadow-sm opacity-60">
               <h2 className="text-md font-bold text-gray-500 mb-3 flex items-center gap-1">🔜 다음 경기 예정</h2>
               {nextUpcomingMatch ? (
-                <><p className="text-sm font-medium text-gray-600">📅 {formatDateUI(nextUpcomingMatch.date)}</p><p className="text-sm text-gray-600 mt-1">🏟️ 강서염창 로꼬풋살스타디움</p></>
+                <>
+                  <p className="text-sm font-medium text-gray-600">📅 {formatDateUI(nextUpcomingMatch.date)}</p>
+                  <p className="text-sm text-gray-600 mt-1 flex items-start gap-1">🏟️ <span className="whitespace-pre-line">{nextUpcomingMatch.location || '미정'}</span></p>
+                  <p className="text-xs text-indigo-600 mt-1 font-bold">👥 {getVoteTargetLabel(nextUpcomingMatch.vote_gender || 'all')}</p>
+                </>
               ) : (<p className="text-sm font-medium text-gray-500">일정 미정</p>)}
             </div>
 
@@ -1491,7 +1594,7 @@ export default function FutsalCloudApp() {
                   <div className="flex flex-col md:flex-row items-center gap-4">
                       <div className="flex items-center gap-2 w-full md:w-1/2">
                           <span className="font-bold text-blue-800 w-20">경기 날짜:</span>
-                          <input type="date" className="border border-blue-300 p-2 rounded font-bold flex-1" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)}/>
+                          <input type="date" className="border border-blue-300 p-2 rounded font-bold flex-1" value={selectedDate} onChange={e=>handleScheduleDateChange(e.target.value)}/>
                       </div>
                       <div className="flex items-center gap-2 w-full md:w-1/2">
                           <span className="font-bold text-blue-800 w-20">경기 시간:</span>
@@ -1500,6 +1603,36 @@ export default function FutsalCloudApp() {
                           <input type="time" className="border border-blue-300 p-2 rounded w-24" value={matchTimeEnd} onChange={e=>setMatchTimeEnd(e.target.value)}/>
                       </div>
                   </div>
+
+                  <div className="flex flex-col md:flex-row gap-4 border-t pt-3">
+                    <div className="flex items-start gap-2 w-full md:w-2/3">
+                      <span className="font-bold text-green-700 w-20 shrink-0 pt-2">경기 장소:</span>
+                      <div className="flex-1">
+                        <textarea
+                          rows={2}
+                          placeholder="풋살장 이름/주소를 입력하세요. 비워두면 '미정'으로 저장됩니다."
+                          className="w-full border border-green-300 p-2 rounded text-sm resize-none"
+                          value={matchLocation}
+                          onChange={e => setMatchLocation(e.target.value)}
+                        />
+                        <p className="text-[11px] text-gray-500 mt-1">※ 장소가 아직 정해지지 않았다면 비워두세요. 저장 시 자동으로 '미정' 처리됩니다.</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full md:w-1/3">
+                      <span className="font-bold text-indigo-700 w-20 shrink-0">투표 대상:</span>
+                      <select
+                        className="border border-indigo-300 p-2 rounded flex-1 bg-white font-bold text-sm"
+                        value={voteGender}
+                        onChange={e => setVoteGender(e.target.value)}
+                      >
+                        <option value="all">전체 선수</option>
+                        <option value="남성">남성 선수만</option>
+                        <option value="여성">여성 선수만</option>
+                      </select>
+                    </div>
+                  </div>
+
                   <div className="flex flex-col md:flex-row items-center gap-4 border-t pt-3">
                       <div className="flex items-center gap-2 w-full md:w-1/2">
                           <span className="font-bold text-red-600 w-20">마감 날짜:</span>
@@ -1529,7 +1662,7 @@ export default function FutsalCloudApp() {
                 </div>
                 
                 <button onClick={handleSaveSchedule} className="w-full bg-indigo-600 text-white py-2 rounded font-bold shadow hover:bg-indigo-700 flex justify-center items-center gap-2 mt-2">
-                  <Calendar size={18} /> 이 날짜로 경기/뒷풀이 공식 일정 저장하기
+                  <Calendar size={18} /> 경기 일정/장소/투표 설정 저장하기
                 </button>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1544,24 +1677,41 @@ export default function FutsalCloudApp() {
             </Card>
             
             <div className="grid grid-cols-2 gap-4">
-              {['남성','여성'].map(gender => (
-                <Card key={gender} title={gender}>
-                  <div className="space-y-2">
-                  {sortedPlayersForVote.filter(p=>p.gender===gender).map(p => {
-                    const isChecked = tempAttendance.includes(p.id);
-                    return (
-                      <div key={p.id} onClick={()=>handleToggleAttendance(p.id)} 
-                           className={`p-3 rounded border cursor-pointer flex justify-between items-center transition-all ${isChecked ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500 shadow-sm' : 'bg-white hover:bg-gray-50'}`}>
-                        <PlayerName player={p} records={records}/>
-                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isChecked?'bg-blue-600 border-blue-600':'border-gray-300'}`}>
-                          {isChecked && <UserCheck size={14} className="text-white"/>}
+              {['남성','여성'].map(gender => {
+                const genderBlocked = voteGender !== 'all' && voteGender !== gender;
+                return (
+                  <Card key={gender} title={`${gender}${genderBlocked ? ' · 투표 제한' : ''}`}>
+                    <div className="space-y-2">
+                    {sortedPlayersForVote.filter(p=>p.gender===gender).map(p => {
+                      const isChecked = tempAttendance.includes(p.id);
+                      const canClick = isChecked || !genderBlocked;
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => canClick && handleToggleAttendance(p.id)}
+                          className={`p-3 rounded border flex justify-between items-center transition-all ${
+                            isChecked
+                              ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500 shadow-sm cursor-pointer'
+                              : genderBlocked
+                                ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-60'
+                                : 'bg-white hover:bg-gray-50 cursor-pointer'
+                          }`}
+                        >
+                          <PlayerName player={p} records={records}/>
+                          {genderBlocked && !isChecked ? (
+                            <span className="text-xs font-bold text-gray-400">🔒</span>
+                          ) : (
+                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isChecked?'bg-blue-600 border-blue-600':'border-gray-300'}`}>
+                              {isChecked && <UserCheck size={14} className="text-white"/>}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    )
-                  })}
-                  </div>
-                </Card>
-              ))}
+                      )
+                    })}
+                    </div>
+                  </Card>
+                );
+              })}
             </div>
           </>
         )}
@@ -1943,10 +2093,28 @@ export default function FutsalCloudApp() {
             </div>
             <div className="p-5 overflow-y-auto flex-1 space-y-4">
               <div className="flex gap-2">
-                {['기본형', '게스트용'].map(type => (
+                {['기본형', '게스트용', '커스텀'].map(type => (
                   <button key={type} onClick={() => setShareTemplate(type)} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-all border ${shareTemplate === type ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm ring-1 ring-blue-500' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'}`}>{type}</button>
                 ))}
               </div>
+
+              {shareTemplate === '커스텀' && (
+                <div className="bg-indigo-50 border border-indigo-200 p-4 rounded-lg">
+                  <label className="block text-sm font-bold text-indigo-900 mb-2">✏️ 커스텀 공지 제목</label>
+                  <input
+                    type="text"
+                    value={customShareTitle}
+                    onChange={(e) => setCustomShareTitle(e.target.value)}
+                    placeholder="예: 총총 FC × OO대학교 친선전 안내‼️"
+                    maxLength={60}
+                    className="w-full border border-indigo-300 bg-white p-2.5 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  />
+                  <p className="text-[11px] text-indigo-500 mt-1.5">
+                    제목만 자유롭게 바뀌고 날짜, 장소, 투표 대상, 참가비, 마감시간은 기존 기본형 형식을 그대로 사용합니다.
+                  </p>
+                </div>
+              )}
+
               <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                 <span className="text-xs font-bold text-gray-400 mb-2 block">미리보기</span>
                 <pre className="text-sm text-gray-800 whitespace-pre-wrap font-sans leading-relaxed">{getShareText(shareTemplate)}</pre>
@@ -1974,7 +2142,10 @@ export default function FutsalCloudApp() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-bold mb-1 text-gray-700">성별</label>
-                  <select className="w-full border p-2 rounded" value={guestForm.gender} onChange={e=>setGuestForm({...guestForm, gender:e.target.value})}><option>남성</option><option>여성</option></select>
+                  <select className="w-full border p-2 rounded" value={guestForm.gender} onChange={e=>setGuestForm({...guestForm, gender:e.target.value})}>
+                    <option value="남성" disabled={voteGender === '여성'}>남성{voteGender === '여성' ? ' (이번 경기 투표 불가)' : ''}</option>
+                    <option value="여성" disabled={voteGender === '남성'}>여성{voteGender === '남성' ? ' (이번 경기 투표 불가)' : ''}</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-bold mb-1 text-gray-700">기본 실력(1~10)</label>
@@ -2004,8 +2175,10 @@ export default function FutsalCloudApp() {
               <button onClick={() => setShowVoteModal(false)}><X size={24} /></button>
             </div>
             <div className="p-4 overflow-y-auto space-y-4">
-              <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg text-center shadow-sm">
+              <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg text-center shadow-sm space-y-1">
                 <p className="text-sm text-blue-800 font-medium">본인 이름을 누르면 <b>즉시 투표(자동 저장)</b> 됩니다.</p>
+                <p className="text-xs font-bold text-gray-700">🏟️ 장소: <span className="whitespace-pre-line">{matchLocation.trim() || '미정'}</span></p>
+                <p className="text-xs font-black text-indigo-700">👥 이번 경기 투표 대상: {getVoteTargetLabel()}</p>
               </div>
               {hasParty && (
                  <div className="bg-purple-50 border border-purple-200 p-2 rounded-lg text-center shadow-sm">
@@ -2013,32 +2186,53 @@ export default function FutsalCloudApp() {
                  </div>
               )}
               <div className="grid grid-cols-1 gap-4">
-                {['남성','여성'].map(gender => (
-                  <div key={gender} className="space-y-2">
-                    <div className="bg-gray-100 text-center font-bold py-1.5 rounded text-sm text-gray-700 shadow-sm border">{gender}</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {sortedPlayersForVote.filter(p=>p.gender===gender).map(p => {
-                        const isChecked = tempAttendance.includes(p.id);
-                        const isPartyChecked = records.find(r => r.player_id === p.id && r.date === selectedDate)?.party_attendance;
-                        return (
-                          <div key={p.id} className="flex items-stretch h-[44px]">
-                            <div onClick={()=>handleToggleAttendance(p.id)} className={`flex-1 min-w-0 px-2 flex justify-between items-center rounded border cursor-pointer transition-all duration-300 ease-in-out ${isChecked ? 'bg-blue-50 border-blue-500 shadow-sm ring-1 ring-blue-500' : 'bg-white hover:bg-gray-50'}`}>
-                              <div className="truncate pr-1"><PlayerName player={p} records={records} hideBadge={true}/></div>
-                              <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors ${isChecked?'bg-blue-600 border-blue-600':'border-gray-300'}`}>{isChecked && <UserCheck size={10} className="text-white"/>}</div>
-                            </div>
-                            {hasParty && (
-                              <div className={`overflow-hidden transition-all duration-300 ease-in-out flex items-stretch ${isChecked ? 'w-10 ml-1.5 opacity-100' : 'w-0 ml-0 opacity-0'}`}>
-                                <button onClick={(e) => { e.stopPropagation(); handleToggleParty(p.id); }} className={`w-full flex flex-col items-center justify-center rounded border transition-colors ${isPartyChecked ? 'bg-yellow-400 border-yellow-500 text-white shadow-inner' : 'bg-gray-100 border-gray-300 text-gray-500 opacity-80 hover:opacity-100'}`}>
-                                  <span className="text-[9px] font-bold leading-none mb-0.5">뒷풀이</span><span className="text-sm leading-none">🍺</span>
-                                </button>
+                {['남성','여성'].map(gender => {
+                  const genderBlocked = voteGender !== 'all' && voteGender !== gender;
+                  return (
+                    <div key={gender} className={`space-y-2 ${genderBlocked ? 'opacity-60' : ''}`}>
+                      <div className={`text-center font-bold py-1.5 rounded text-sm shadow-sm border ${genderBlocked ? 'bg-gray-200 text-gray-500' : 'bg-gray-100 text-gray-700'}`}>
+                        {gender} {genderBlocked && <span className="text-[10px] ml-1">🔒 투표 제한</span>}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {sortedPlayersForVote.filter(p=>p.gender===gender).map(p => {
+                          const isChecked = tempAttendance.includes(p.id);
+                          const isPartyChecked = records.find(r => r.player_id === p.id && r.date === selectedDate)?.party_attendance;
+                          const canClick = isChecked || !genderBlocked;
+                          return (
+                            <div key={p.id} className="flex items-stretch h-[44px]">
+                              <div
+                                onClick={() => canClick && handleToggleAttendance(p.id)}
+                                className={`flex-1 min-w-0 px-2 flex justify-between items-center rounded border transition-all duration-300 ease-in-out ${
+                                  isChecked
+                                    ? 'bg-blue-50 border-blue-500 shadow-sm ring-1 ring-blue-500 cursor-pointer'
+                                    : genderBlocked
+                                      ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                                      : 'bg-white hover:bg-gray-50 cursor-pointer'
+                                }`}
+                              >
+                                <div className="truncate pr-1"><PlayerName player={p} records={records} hideBadge={true}/></div>
+                                {genderBlocked && !isChecked ? (
+                                  <span className="text-xs shrink-0">🔒</span>
+                                ) : (
+                                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors ${isChecked?'bg-blue-600 border-blue-600':'border-gray-300'}`}>
+                                    {isChecked && <UserCheck size={10} className="text-white"/>}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        )
-                      })}
+                              {hasParty && (
+                                <div className={`overflow-hidden transition-all duration-300 ease-in-out flex items-stretch ${isChecked ? 'w-10 ml-1.5 opacity-100' : 'w-0 ml-0 opacity-0'}`}>
+                                  <button onClick={(e) => { e.stopPropagation(); handleToggleParty(p.id); }} className={`w-full flex flex-col items-center justify-center rounded border transition-colors ${isPartyChecked ? 'bg-yellow-400 border-yellow-500 text-white shadow-inner' : 'bg-gray-100 border-gray-300 text-gray-500 opacity-80 hover:opacity-100'}`}>
+                                    <span className="text-[9px] font-bold leading-none mb-0.5">뒷풀이</span><span className="text-sm leading-none">🍺</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
             
@@ -2059,7 +2253,12 @@ export default function FutsalCloudApp() {
               </div>
             )}
             <div className="p-4 border-t bg-gray-50 shrink-0 space-y-2">
-              <button onClick={() => setShowGuestModal(true)} className="w-full bg-green-50 text-green-700 border-2 border-green-500 py-2.5 rounded-lg font-bold hover:bg-green-100 flex items-center justify-center gap-2 border-dashed">
+              <button onClick={() => {
+                if (voteGender === '남성' || voteGender === '여성') {
+                  setGuestForm(prev => ({ ...prev, gender: voteGender }));
+                }
+                setShowGuestModal(true);
+              }} className="w-full bg-green-50 text-green-700 border-2 border-green-500 py-2.5 rounded-lg font-bold hover:bg-green-100 flex items-center justify-center gap-2 border-dashed">
                 <UserPlus size={18}/> ⚽️ 내 지인(게스트) 투표 명단에 추가하기
               </button>
               <button onClick={() => setShowVoteModal(false)} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold text-lg hover:bg-blue-700 shadow-lg">투표 완료 (창 닫기)</button>
