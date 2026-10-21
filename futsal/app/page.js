@@ -14,7 +14,7 @@ import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, 
   PolarRadiusAxis, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  PieChart, Pie, Cell
+  PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
 
 // --------------------------------------------------------
@@ -37,6 +37,7 @@ const calculateLevel = (stats) => {
   return Number((sum / 6).toFixed(2));
 };
 
+// --- 자동 보정 레벨 ---
 const calculateDynamicLevel = (player, allRecords = [], schedules = [], allPlayers = []) => {
   if (!player) return 0;
 
@@ -177,6 +178,26 @@ const calculateDynamicLevel = (player, allRecords = [], schedules = [], allPlaye
   return Number(
     Math.max(1, Math.min(10, baseLevel + totalAdjustment)).toFixed(2)
   );
+};
+
+// --- 과거 레벨 변화 추이를 계산하는 헬퍼 함수 ---
+const getHistoricalTrend = (player, records, schedules, allPlayers) => {
+  if (!player) return [];
+  const playerRecords = records.filter(r => r.player_id === player.id).sort((a,b) => a.date.localeCompare(b.date));
+  if (playerRecords.length === 0) return [];
+
+  // 시각적인 쾌적함을 위해 최근 15경기 기록만 차트에 반영
+  const targetRecords = playerRecords.slice(-15);
+
+  return targetRecords.map(pr => {
+    const pastRecords = records.filter(r => r.date <= pr.date);
+    const pastSchedules = schedules.filter(s => s.date <= pr.date);
+    const level = calculateDynamicLevel(player, pastRecords, pastSchedules, allPlayers);
+    return {
+      name: pr.date.slice(5), // YYYY-MM-DD -> MM-DD
+      level: level
+    };
+  });
 };
 
 const calculateExpireDate = (type, dateStr) => {
@@ -320,6 +341,9 @@ const PlayerDetailModal = ({ player, players, records, schedules, totalMatches, 
   const levelDiff = dynamicLevel - baseLevel;
   const dday = player.group === '스타즈' ? getDday(player.expire_date) : null;
   
+  // 추이 차트를 위한 데이터 (최근 15경기)
+  const trendData = useMemo(() => getHistoricalTrend(player, records, schedules, players), [player, records, schedules, players]);
+  
   const chartData = [
     { subject: '밸런스', A: player.balance, fullMark: 10 },
     { subject: '패스', A: player.passing, fullMark: 10 },
@@ -331,7 +355,7 @@ const PlayerDetailModal = ({ player, players, records, schedules, totalMatches, 
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[80] p-4">
-      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+      <div className="bg-white rounded-lg w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
         <div className="bg-blue-700 text-white p-4 flex justify-between items-center">
           <h2 className="text-xl font-bold"><PlayerName player={player} hideBadge={true}/> 상세 정보</h2>
           <button onClick={onClose}><X size={24} /></button>
@@ -389,7 +413,8 @@ const PlayerDetailModal = ({ player, players, records, schedules, totalMatches, 
                 <p className="text-xs text-gray-400 mb-1">
                   기본 Lv.{baseLevel}
                   {Math.abs(levelDiff) >= 0.01 && (
-                    <span className={`ml-1 font-bold ${levelDiff > 0 ? 'text-blue-500' : 'text-red-500'}`}>
+                    // 주식처럼 오르면 빨간색, 내리면 파란색 적용
+                    <span className={`ml-1 font-bold ${levelDiff > 0 ? 'text-red-500' : 'text-blue-500'}`}>
                       ({levelDiff > 0 ? '▲' : '▼'}{Math.abs(levelDiff).toFixed(2)})
                     </span>
                   )}
@@ -427,22 +452,45 @@ const PlayerDetailModal = ({ player, players, records, schedules, totalMatches, 
                 </div>
               </div>
             </div>
-            <div className="flex-1">
-              <h3 className="font-bold text-lg mb-2 border-b pb-1 mt-4 md:mt-0">최근 경기 기록</h3>
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
-                {history.length === 0 ? <p className="text-gray-400">기록이 없습니다.</p> : 
-                  history.map(h => (
-                    <div key={h.id} className="bg-gray-50 p-2 rounded border flex justify-between items-center text-sm">
-                      <span className="font-bold text-gray-700">{h.date}</span>
-                      <span>팀{h.team}</span>
-                      <span className="font-bold text-blue-600">{h.goals}골</span>
-                      <span className="font-bold text-green-600">{h.assists}어시</span>
-                      <span className={`font-bold ${h.performance_rating ? 'text-amber-600' : 'text-gray-300'}`}>
-                        {h.performance_rating ? `⭐${h.performance_rating}` : '미평가'}
-                      </span>
-                    </div>
-                  ))
-                }
+            
+            <div className="flex-1 flex flex-col">
+              <div>
+                <h3 className="font-bold text-lg mb-2 border-b pb-1 mt-4 md:mt-0">최근 경기 기록</h3>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                  {history.length === 0 ? <p className="text-gray-400">기록이 없습니다.</p> : 
+                    history.map(h => (
+                      <div key={h.id} className="bg-gray-50 p-2 rounded border flex justify-between items-center text-sm">
+                        <span className="font-bold text-gray-700">{h.date}</span>
+                        <span>팀{h.team}</span>
+                        <span className="font-bold text-blue-600">{h.goals}골</span>
+                        <span className="font-bold text-green-600">{h.assists}어시</span>
+                        <span className={`font-bold ${h.performance_rating ? 'text-amber-600' : 'text-gray-300'}`}>
+                          {h.performance_rating ? `⭐${h.performance_rating}` : '미평가'}
+                        </span>
+                      </div>
+                    ))
+                  }
+                </div>
+              </div>
+
+              {/* --- [추가됨] 레벨 변화 추이 라인 차트 --- */}
+              <div className="mt-6 flex-1 flex flex-col">
+                <h3 className="font-bold text-lg mb-2 border-b pb-1">📈 레벨 변화 추이 (최근 15경기)</h3>
+                <div className="w-full h-48 bg-gray-50 rounded-xl p-3 border">
+                  {trendData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={trendData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" tick={{fontSize: 10}} tickMargin={5} />
+                        <YAxis domain={['auto', 'auto']} tick={{fontSize: 10}} width={30} />
+                        <Tooltip contentStyle={{borderRadius: '8px', fontSize: '12px', padding: '5px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                        <Line type="monotone" dataKey="level" stroke="#ef4444" strokeWidth={3} dot={{ r: 3, fill: '#ef4444' }} activeDot={{ r: 5 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="w-full h-full flex justify-center items-center text-sm text-gray-400">데이터가 없습니다.</div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1258,7 +1306,7 @@ export default function FutsalCloudApp() {
 
   const generateTeams = async () => {
     const currentDayRecords = records.filter(r => r.date === selectedDate);
-    if (!currentDayRecords.length) return alert('참여 인원이 없습니다.');
+    if (!currentDayRecords.length) return alert('참参与 인원이 없습니다.');
     if (!window.confirm('팀을 새로 배정하시겠습니까? (기존 배정 초기화)\n* 초대자와 게스트는 무조건 같은 팀으로 배정됩니다.')) return;
 
     const currentDayPlayerIds = currentDayRecords.map(r => r.player_id);
@@ -1824,11 +1872,12 @@ export default function FutsalCloudApp() {
                             <td className="p-3"><span className={`px-2 py-1 rounded text-xs ${p.gender==='남성'?'bg-blue-100 text-blue-800':'bg-pink-100 text-pink-800'}`}>{p.gender}</span></td>
                             <td className="p-3">
                               <div className="flex flex-col items-center">
-                                <span className={`font-black ${p.dynamic_level > calculateLevel(p) ? 'text-blue-600' : p.dynamic_level < calculateLevel(p) ? 'text-red-600' : 'text-gray-700'}`}>
+                                {/* 주식처럼 오르면 빨간색, 내리면 파란색 적용 */}
+                                <span className={`font-black ${p.dynamic_level > calculateLevel(p) ? 'text-red-500' : p.dynamic_level < calculateLevel(p) ? 'text-blue-500' : 'text-gray-700'}`}>
                                   {p.dynamic_level}
                                 </span>
                                 {Math.abs(p.dynamic_level - calculateLevel(p)) >= 0.01 && (
-                                  <span className={`text-[10px] ${p.dynamic_level > calculateLevel(p) ? 'text-blue-400' : 'text-red-400'}`}>
+                                  <span className={`text-[10px] ${p.dynamic_level > calculateLevel(p) ? 'text-red-500' : 'text-blue-500'}`}>
                                     기본 {calculateLevel(p)} ({p.dynamic_level > calculateLevel(p) ? '▲' : '▼'}{Math.abs(p.dynamic_level - calculateLevel(p)).toFixed(2)})
                                   </span>
                                 )}
