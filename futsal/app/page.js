@@ -23,7 +23,6 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 // --------------------------------------------------------
 
-// [수정됨] 한국 시간에 맞춰 정확한 오늘 날짜를 'YYYY-MM-DD'로 반환하는 헬퍼 함수
 const getTodayDateString = () => {
   const today = new Date();
   const year = today.getFullYear();
@@ -38,7 +37,6 @@ const calculateLevel = (stats) => {
   return Number((sum / 6).toFixed(2));
 };
 
-// --- 자동 보정 레벨 ---
 const calculateDynamicLevel = (player, allRecords = [], schedules = [], allPlayers = []) => {
   if (!player) return 0;
 
@@ -319,6 +317,7 @@ const PlayerDetailModal = ({ player, players, records, schedules, totalMatches, 
   
   const baseLevel = calculateLevel(player);
   const dynamicLevel = calculateDynamicLevel(player, records, schedules, players);
+  const levelDiff = dynamicLevel - baseLevel;
   const dday = player.group === '스타즈' ? getDday(player.expire_date) : null;
   
   const chartData = [
@@ -387,7 +386,14 @@ const PlayerDetailModal = ({ player, players, records, schedules, totalMatches, 
               </div>
               <div className="mt-4 text-center">
                 <p className="text-2xl font-bold text-blue-700">자동 Level {dynamicLevel}</p>
-                <p className="text-xs text-gray-400 mb-1">기본 Lv.{baseLevel} + 최근 경기 기록 보정</p>
+                <p className="text-xs text-gray-400 mb-1">
+                  기본 Lv.{baseLevel}
+                  {Math.abs(levelDiff) >= 0.01 && (
+                    <span className={`ml-1 font-bold ${levelDiff > 0 ? 'text-blue-500' : 'text-red-500'}`}>
+                      ({levelDiff > 0 ? '▲' : '▼'}{Math.abs(levelDiff).toFixed(2)})
+                    </span>
+                  )}
+                </p>
                 <p className="text-sm text-gray-600 mb-2">성별: {player.gender} | 등급: <span className="font-bold text-blue-600">{player.group||'일반'}</span></p>
 
                 <div className="flex justify-center gap-3 mb-2">
@@ -846,7 +852,6 @@ export default function FutsalCloudApp() {
   };
   const handleLogout = async () => { if (window.confirm('로그아웃 하시겠습니까?')) await supabase.auth.signOut(); };
 
-  // --- [수정됨] 투표 클릭 시 팝업 확인 로직 추가 ---
   const handleToggleAttendance = async (pid) => {
     const isVoteClosed = new Date() > new Date(`${deadlineDate}T${deadlineTime}:00`);
     if (isVoteClosed && !isAdmin) return alert('⏰ 투표 시간이 마감되었습니다!\n지각이나 불참 등 변동 사항은 카톡방이나 운영진에게 문의해주세요.');
@@ -859,12 +864,11 @@ export default function FutsalCloudApp() {
       return alert(`🚫 이번 경기는 ${getVoteTargetLabel()} 투표할 수 있습니다.`);
     }
 
-    // 더블클릭 방지 및 확실한 피드백을 위한 확인 팝업
     const confirmMsg = isAttending
       ? `[${playerName}]님, 이번 경기 참석을 '취소' 하시겠습니까?`
       : `[${playerName}]님, 이번 경기에 '참석'으로 투표하시겠습니까?`;
 
-    if (!window.confirm(confirmMsg)) return; // 사용자가 '취소'를 누르면 그대로 종료
+    if (!window.confirm(confirmMsg)) return; 
     
     if (isAttending) {
       setTempAttendance(prev => prev.filter(id => id !== pid));
@@ -879,7 +883,6 @@ export default function FutsalCloudApp() {
     }
   };
 
-  // --- [수정됨] 뒷풀이 투표 클릭 시 팝업 확인 로직 추가 ---
   const handleToggleParty = async (pid) => {
     const isVoteClosed = new Date() > new Date(`${deadlineDate}T${deadlineTime}:00`);
     if (isVoteClosed && !isAdmin) return alert('⏰ 투표 시간이 마감되었습니다!\n지각이나 불참 등 변동 사항은 카톡방이나 운영진에게 문의해주세요.');
@@ -1747,11 +1750,9 @@ export default function FutsalCloudApp() {
 
             <div className="bg-white rounded shadow overflow-hidden">
               <div className="p-3 border-b bg-gray-50">
-                {isAdmin && (
-                  <div className="mb-3 text-[11px] sm:text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-lg p-2 font-medium">
-                    💡 자동 Lv = 기본 능력치 + 최근 4경기 출전률 + 같은 성별 대비 폼 + 본인 최근 폼 + 운영진 활약도(약 25%) · 최종 변동 약 -1.20 ~ +1.20
-                  </div>
-                )}
+                <div className="mb-3 text-[11px] sm:text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-lg p-2 font-medium">
+                  💡 자동 Lv = 기본 능력치 + 최근 4경기 출전률 + 같은 성별 대비 폼 + 본인 최근 폼 + 운영진 활약도(약 25%) · 최종 변동 약 -1.20 ~ +1.20
+                </div>
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
                  <div className="flex gap-1">
                    {['all', '남성', '여성'].map(f => (
@@ -1826,7 +1827,7 @@ export default function FutsalCloudApp() {
                                 <span className={`font-black ${p.dynamic_level > calculateLevel(p) ? 'text-blue-600' : p.dynamic_level < calculateLevel(p) ? 'text-red-600' : 'text-gray-700'}`}>
                                   {p.dynamic_level}
                                 </span>
-                                {isAdmin && Math.abs(p.dynamic_level - calculateLevel(p)) >= 0.01 && (
+                                {Math.abs(p.dynamic_level - calculateLevel(p)) >= 0.01 && (
                                   <span className={`text-[10px] ${p.dynamic_level > calculateLevel(p) ? 'text-blue-400' : 'text-red-400'}`}>
                                     기본 {calculateLevel(p)} ({p.dynamic_level > calculateLevel(p) ? '▲' : '▼'}{Math.abs(p.dynamic_level - calculateLevel(p)).toFixed(2)})
                                   </span>
@@ -1834,7 +1835,6 @@ export default function FutsalCloudApp() {
                               </div>
                             </td>
                             
-                            {/* --- [추가됨] 매너점수 및 경고 표시 --- */}
                             <td className="p-3">
                               <div className="flex flex-col items-center">
                                 <span className={`font-bold ${(p.manner_score||100) >= 120 ? 'text-blue-600' : (p.manner_score||100) < 90 ? 'text-red-600' : 'text-gray-700'}`}>
